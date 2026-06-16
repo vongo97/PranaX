@@ -45,15 +45,6 @@ fun BreathingScreen(
     val settings by settingsRepository.settingsFlow.collectAsState(initial = com.example.breathingapp.data.AppSettings())
     val coroutineScope = rememberCoroutineScope()
 
-    // WAKELOCK: Evita que la pantalla se apague mientras esta vista esté abierta
-    DisposableEffect(Unit) {
-        val window = (context as? android.app.Activity)?.window
-        window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        onDispose {
-            window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        }
-    }
-
     val vibrator = remember {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
@@ -61,6 +52,16 @@ fun BreathingScreen(
         } else {
             @Suppress("DEPRECATION")
             context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+    }
+
+    // WAKELOCK: Evita que la pantalla se apague mientras esta vista esté abierta
+    DisposableEffect(Unit) {
+        val window = (context as? android.app.Activity)?.window
+        window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        onDispose {
+            window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            vibrator.cancel() // Detener vibración al salir de la pantalla
         }
     }
 

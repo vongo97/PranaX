@@ -56,6 +56,7 @@ class BreathingViewModel : ViewModel() {
         if (isRunning) {
             isRunning = false
             mediaPlayerBg?.pause()
+            vibrator?.cancel() // Detener vibración inmediatamente
         } else {
             currentPattern = pattern
             targetDurationMs = targetMinutes * 60 * 1000L
@@ -67,7 +68,10 @@ class BreathingViewModel : ViewModel() {
             if (settings.isBackgroundEnabled) {
                 mediaPlayerBg?.start()
             }
-            vibrateTick(vibrator, settings)
+            
+            // Disparar vibración inicial
+            val initialDuration = if (currentPhase == BreathingPhase.PREPARE) 3000L else currentPattern.inhaleMs
+            vibratePhaseWaveform(vibrator, currentPhase, initialDuration, settings)
         }
     }
 
@@ -92,6 +96,9 @@ class BreathingViewModel : ViewModel() {
             }
 
             if (phaseDuration > 0) {
+                // Iniciar vibración háptica para esta fase
+                vibratePhaseWaveform(vibrator, currentPhase, phaseDuration, settings)
+
                 val startTime = System.currentTimeMillis()
                 while (System.currentTimeMillis() - startTime < phaseDuration && isRunning) {
                     val now = System.currentTimeMillis()
@@ -105,6 +112,7 @@ class BreathingViewModel : ViewModel() {
                     if (targetDurationMs > 0 && elapsedSessionTimeMs >= targetDurationMs) {
                         isRunning = false
                         mediaPlayerBg?.pause()
+                        vibrator?.cancel() // Detener vibración
                         currentPhase = BreathingPhase.IDLE
                         onSessionComplete()
                         break
@@ -124,10 +132,6 @@ class BreathingViewModel : ViewModel() {
                         soundPool?.play(soundIdLow, 1f, 1f, 1, 0, 1f)
                     }
                 }
-
-                if (currentPhase == BreathingPhase.INHALE || currentPhase == BreathingPhase.EXHALE) {
-                   vibrateTick(vibrator, settings)
-                }
             }
         }
     }
@@ -143,17 +147,77 @@ class BreathingViewModel : ViewModel() {
         }
     }
 
-    private fun vibrateTick(vibrator: Vibrator?, settings: com.example.breathingapp.data.AppSettings) {
-        if (!settings.isVibrationEnabled || vibrator == null) return
+    private fun vibratePhaseWaveform(
+        vibrator: Vibrator?, 
+        phase: BreathingPhase, 
+        durationMs: Long, 
+        settings: com.example.breathingapp.data.AppSettings
+    ) {
+        if (!settings.isVibrationEnabled || vibrator == null || durationMs <= 0) return
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
+                // Dividimos la duración de la fase en pasos de 200ms
+                val stepDuration = 200L
+                val steps = (durationMs / stepDuration).toInt().coerceAtLeast(3)
+                val timings = LongArray(steps) { stepDuration }
+                val amplitudes = IntArray(steps)
+
+                when (phase) {
+                    BreathingPhase.INHALE -> {
+                        // Amplitud ascendente (vibración creciente de 10 a 160)
+                        for (i in 0 until steps) {
+                            val progress = i.toFloat() / (steps - 1)
+                            amplitudes[i] = (15 + progress * 135).toInt().coerceIn(0, 255)
+                        }
+                    }
+                    BreathingPhase.EXHALE -> {
+                        // Amplitud descendente (vibración decreciente de 160 a 10)
+                        for (i in 0 until steps) {
+                            val progress = i.toFloat() / (steps - 1)
+                            amplitudes[i] = (150 - progress * 135).toInt().coerceIn(0, 255)
+                        }
+                    }
+                    BreathingPhase.HOLD_IN -> {
+                        // Latidos suaves cada 1 segundo (pulso de 80ms encendido, el resto apagado)
+                        for (i in 0 until steps) {
+                            // 5 pasos de 200ms = 1000ms. Hacemos un pulso en el paso 0 de cada ciclo
+                            amplitudes[i] = if (i % 5 == 0) 50 else 0
+                        }
+                    }
+                    BreathingPhase.PREPARE -> {
+                        // Pequeño doble pulso de inicio
+                        timings[0] = 100L
+                        timings[1] = 100L
+                        timings[2] = 100L
+                        amplitudes[0] = 80
+                        amplitudes[1] = 0
+                        amplitudes[2] = 80
+                        // Apagamos el resto de pasos
+                        for (i in 3 until steps) {
+                            amplitudes[i] = 0
+                        }
+                    }
+                    else -> {
+                        // HOLD_OUT o IDLE: sin vibración continua
+                        vibrator.cancel()
+                        return
+                    }
+                }
+                vibrator.vibrate(VibrationEffect.createWaveform(timings, amplitudes, -1))
             } else {
+                // Fallback para APIs anteriores a Android 8.0 (clicks simples de inicio)
+                val pattern = when (phase) {
+                    BreathingPhase.INHALE -> longArrayOf(0, 80, 200, 80)
+                    BreathingPhase.EXHALE -> longArrayOf(0, 100, 150, 50)
+                    BreathingPhase.HOLD_IN -> longArrayOf(0, 40)
+                    BreathingPhase.PREPARE -> longArrayOf(0, 60, 100, 60)
+                    else -> longArrayOf(0)
+                }
                 @Suppress("DEPRECATION")
-                vibrator.vibrate(50)
+                vibrator.vibrate(pattern, -1)
             }
         } catch (e: Exception) {
-            // Ignore if vibration fails
+            // Ignorar si falla el motor de vibración
         }
     }
 }
