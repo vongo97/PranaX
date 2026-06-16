@@ -1,8 +1,28 @@
 package com.example.breathingapp
 
-import androidx.navigation3.runtime.NavKey
 import kotlinx.serialization.Serializable
 
-@Serializable data object Main : NavKey
+@Serializable
+object HomeRoute
 
-@Serializable data class BreathingSession(val patternIndex: Int) : NavKey
+@Serializable
+object CreateRoute
+
+@Serializable
+object GardenRoute
+
+@Serializable
+object SettingsRoute
+
+@Serializable
+data class PrepRoute(val patternIndex: Int)
+
+@Serializable
+data class BreathingRoute(
+    val name: String,
+    val inhaleMs: Long,
+    val holdInMs: Long,
+    val exhaleMs: Long,
+    val holdOutMs: Long,
+    val durationMinutes: Int
+)
