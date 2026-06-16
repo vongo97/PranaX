@@ -178,13 +178,42 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 }
             )
             SettingsSwitch(
-                title = "Fondo de Bosque",
-                subtitle = "Sonido relajante constante",
+                title = "Sonido de Fondo",
+                subtitle = "Reproducir un sonido ambiental relajante durante el ejercicio",
                 checked = backgroundAudioEnabled,
                 onCheckedChange = { 
                     coroutineScope.launch { repository.updateBackground(it) } 
                 }
             )
+
+            if (backgroundAudioEnabled) {
+                Text(
+                    text = "Tipo de Sonido:",
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FilterChip(
+                        selected = settings.backgroundAudioType == "forest",
+                        onClick = { coroutineScope.launch { repository.updateBackgroundAudioType("forest") } },
+                        label = { Text("🌲 Bosque") }
+                    )
+                    FilterChip(
+                        selected = settings.backgroundAudioType == "rain",
+                        onClick = { coroutineScope.launch { repository.updateBackgroundAudioType("rain") } },
+                        label = { Text("🌧️ Lluvia") }
+                    )
+                    FilterChip(
+                        selected = settings.backgroundAudioType == "ocean",
+                        onClick = { coroutineScope.launch { repository.updateBackgroundAudioType("ocean") } },
+                        label = { Text("🌊 Océano") }
+                    )
+                }
+            }
             SettingsSwitch(
                 title = "Vibración Háptica",
                 subtitle = "Vibraciones al cambiar de fase",

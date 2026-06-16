@@ -21,7 +21,8 @@ data class AppSettings(
     val isReminderEnabled: Boolean = false,
     val reminderHour: Int = 20,
     val reminderMinute: Int = 0,
-    val seedType: String = "flower" // flower, bonsai, cactus
+    val seedType: String = "flower", // flower, bonsai, cactus
+    val backgroundAudioType: String = "forest" // forest, rain, ocean
 )
 
 class SettingsRepository(private val context: Context) {
@@ -40,6 +41,7 @@ class SettingsRepository(private val context: Context) {
     private val REMINDER_HOUR_KEY = androidx.datastore.preferences.core.intPreferencesKey("reminder_hour")
     private val REMINDER_MINUTE_KEY = androidx.datastore.preferences.core.intPreferencesKey("reminder_minute")
     private val SEED_TYPE_KEY = stringPreferencesKey("seed_type")
+    private val BACKGROUND_AUDIO_TYPE_KEY = stringPreferencesKey("background_audio_type")
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { preferences ->
         AppSettings(
@@ -56,7 +58,8 @@ class SettingsRepository(private val context: Context) {
             isReminderEnabled = preferences[REMINDER_ENABLED_KEY] ?: false,
             reminderHour = preferences[REMINDER_HOUR_KEY] ?: 20,
             reminderMinute = preferences[REMINDER_MINUTE_KEY] ?: 0,
-            seedType = preferences[SEED_TYPE_KEY] ?: "flower"
+            seedType = preferences[SEED_TYPE_KEY] ?: "flower",
+            backgroundAudioType = preferences[BACKGROUND_AUDIO_TYPE_KEY] ?: "forest"
         )
     }
 
@@ -103,6 +106,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun updateSeedType(type: String) {
         context.dataStore.edit { it[SEED_TYPE_KEY] = type }
+    }
+
+    suspend fun updateBackgroundAudioType(type: String) {
+        context.dataStore.edit { it[BACKGROUND_AUDIO_TYPE_KEY] = type }
     }
 
     suspend fun recordSessionCompletion(minutesMeditated: Int) {

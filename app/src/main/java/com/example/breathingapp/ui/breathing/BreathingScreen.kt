@@ -81,12 +81,20 @@ fun BreathingScreen(
     val soundIdHigh = remember { mutableStateOf(0) }
     val soundIdLow = remember { mutableStateOf(0) }
 
-    DisposableEffect(settings.isBackgroundEnabled) {
+    DisposableEffect(settings.isBackgroundEnabled, settings.backgroundAudioType) {
         if (settings.isBackgroundEnabled) {
-            val mp = android.media.MediaPlayer.create(context, R.raw.forest_bg)
+            val audioRes = when (settings.backgroundAudioType) {
+                "rain" -> R.raw.rain_bg
+                "ocean" -> R.raw.ocean_bg
+                else -> R.raw.forest_bg
+            }
+            val mp = android.media.MediaPlayer.create(context, audioRes)
             mp?.isLooping = true
             mp?.setVolume(0.5f, 0.5f)
             mediaPlayerBg.value = mp
+            if (viewModel.isRunning) {
+                mp?.start()
+            }
         }
         onDispose {
             mediaPlayerBg.value?.release()
