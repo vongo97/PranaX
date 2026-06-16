@@ -10,12 +10,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.shape.CircleShape
-
 import androidx.compose.ui.platform.LocalContext
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.example.breathingapp.data.SettingsRepository
+import com.example.breathingapp.data.ReminderReceiver
 import kotlinx.coroutines.launch
 
 @Composable
@@ -34,11 +33,41 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         contract = ActivityResultContracts.PickVisualMedia(),
         onResult = { uri ->
             if (uri != null) {
-                // You would typically persist permissions here for the URI, but for simplicity:
                 coroutineScope.launch { repository.updateBackgroundUri(uri.toString()) }
             }
         }
     )
+
+    // Lanzador para solicitar permisos de notificación en Android 13+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = { isGranted ->
+            if (isGranted) {
+                coroutineScope.launch {
+                    repository.updateReminderEnabled(true)
+                    ReminderReceiver.scheduleReminder(context, settings.reminderHour, settings.reminderMinute)
+                }
+            }
+        }
+    )
+
+    // Configuración del diálogo de selección de hora nativo
+    val timePickerDialog = remember(settings.reminderHour, settings.reminderMinute) {
+        android.app.TimePickerDialog(
+            context,
+            { _, hourOfDay, minuteOfHour ->
+                coroutineScope.launch {
+                    repository.updateReminderTime(hourOfDay, minuteOfHour)
+                    if (settings.isReminderEnabled) {
+                        ReminderReceiver.scheduleReminder(context, hourOfDay, minuteOfHour)
+                    }
+                }
+            },
+            settings.reminderHour,
+            settings.reminderMinute,
+            true // formato de 24 horas
+        )
+    }
 
     Column(
         modifier = modifier
@@ -69,7 +98,6 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                     coroutineScope.launch { repository.updateDarkMode(it) } 
                 }
             )
-            // Selector de Fondos de Pantalla
             SettingsItemClickable(
                 title = "Fondo de Pantalla Personalizado",
                 subtitle = "Elegir de tu galería"
@@ -95,6 +123,49 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
             ) { Text("Quitar Fondo") }
+        }
+
+        SettingsSection(title = "Recordatorios 🌱") {
+            SettingsSwitch(
+                title = "Recordatorio Diario",
+                subtitle = "Notificación para hacer tu ejercicio diario de respiración",
+                checked = settings.isReminderEnabled,
+                onCheckedChange = { enabled ->
+                    if (enabled) {
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                            val permission = android.Manifest.permission.POST_NOTIFICATIONS
+                            val isGranted = context.checkSelfPermission(permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                            if (isGranted) {
+                                coroutineScope.launch {
+                                    repository.updateReminderEnabled(true)
+                                    ReminderReceiver.scheduleReminder(context, settings.reminderHour, settings.reminderMinute)
+                                }
+                            } else {
+                                permissionLauncher.launch(permission)
+                            }
+                        } else {
+                            coroutineScope.launch {
+                                repository.updateReminderEnabled(true)
+                                ReminderReceiver.scheduleReminder(context, settings.reminderHour, settings.reminderMinute)
+                            }
+                        }
+                    } else {
+                        coroutineScope.launch {
+                            repository.updateReminderEnabled(false)
+                            ReminderReceiver.cancelReminder(context)
+                        }
+                    }
+                }
+            )
+            
+            if (settings.isReminderEnabled) {
+                SettingsItemClickable(
+                    title = "Hora de Alarma",
+                    subtitle = "Programado a las ${settings.reminderHour.toString().padStart(2, '0')}:${settings.reminderMinute.toString().padStart(2, '0')}"
+                ) {
+                    timePickerDialog.show()
+                }
+            }
         }
 
         SettingsSection(title = "Experiencia") {

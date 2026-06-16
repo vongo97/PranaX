@@ -17,7 +17,10 @@ data class AppSettings(
     val lastSessionDate: String = "",
     val dailyStreak: Int = 0,
     val bellType: String = "bowl", // bowl, chime
-    val totalMinutesMeditated: Int = 0
+    val totalMinutesMeditated: Int = 0,
+    val isReminderEnabled: Boolean = false,
+    val reminderHour: Int = 20,
+    val reminderMinute: Int = 0
 )
 
 class SettingsRepository(private val context: Context) {
@@ -32,6 +35,9 @@ class SettingsRepository(private val context: Context) {
     private val DAILY_STREAK_KEY = androidx.datastore.preferences.core.intPreferencesKey("daily_streak")
     private val BELL_TYPE_KEY = stringPreferencesKey("bell_type")
     private val TOTAL_MINUTES_KEY = androidx.datastore.preferences.core.intPreferencesKey("total_minutes")
+    private val REMINDER_ENABLED_KEY = booleanPreferencesKey("reminder_enabled")
+    private val REMINDER_HOUR_KEY = androidx.datastore.preferences.core.intPreferencesKey("reminder_hour")
+    private val REMINDER_MINUTE_KEY = androidx.datastore.preferences.core.intPreferencesKey("reminder_minute")
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { preferences ->
         AppSettings(
@@ -44,7 +50,10 @@ class SettingsRepository(private val context: Context) {
             lastSessionDate = preferences[LAST_DATE_KEY] ?: "",
             dailyStreak = preferences[DAILY_STREAK_KEY] ?: 0,
             bellType = preferences[BELL_TYPE_KEY] ?: "bowl",
-            totalMinutesMeditated = preferences[TOTAL_MINUTES_KEY] ?: 0
+            totalMinutesMeditated = preferences[TOTAL_MINUTES_KEY] ?: 0,
+            isReminderEnabled = preferences[REMINDER_ENABLED_KEY] ?: false,
+            reminderHour = preferences[REMINDER_HOUR_KEY] ?: 20,
+            reminderMinute = preferences[REMINDER_MINUTE_KEY] ?: 0
         )
     }
 
@@ -76,6 +85,17 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun updateBellType(type: String) {
         context.dataStore.edit { it[BELL_TYPE_KEY] = type }
+    }
+
+    suspend fun updateReminderEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[REMINDER_ENABLED_KEY] = enabled }
+    }
+
+    suspend fun updateReminderTime(hour: Int, minute: Int) {
+        context.dataStore.edit {
+            it[REMINDER_HOUR_KEY] = hour
+            it[REMINDER_MINUTE_KEY] = minute
+        }
     }
 
     suspend fun recordSessionCompletion(minutesMeditated: Int) {
