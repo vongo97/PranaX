@@ -20,7 +20,8 @@ data class AppSettings(
     val totalMinutesMeditated: Int = 0,
     val isReminderEnabled: Boolean = false,
     val reminderHour: Int = 20,
-    val reminderMinute: Int = 0
+    val reminderMinute: Int = 0,
+    val seedType: String = "flower" // flower, bonsai, cactus
 )
 
 class SettingsRepository(private val context: Context) {
@@ -38,6 +39,7 @@ class SettingsRepository(private val context: Context) {
     private val REMINDER_ENABLED_KEY = booleanPreferencesKey("reminder_enabled")
     private val REMINDER_HOUR_KEY = androidx.datastore.preferences.core.intPreferencesKey("reminder_hour")
     private val REMINDER_MINUTE_KEY = androidx.datastore.preferences.core.intPreferencesKey("reminder_minute")
+    private val SEED_TYPE_KEY = stringPreferencesKey("seed_type")
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { preferences ->
         AppSettings(
@@ -53,7 +55,8 @@ class SettingsRepository(private val context: Context) {
             totalMinutesMeditated = preferences[TOTAL_MINUTES_KEY] ?: 0,
             isReminderEnabled = preferences[REMINDER_ENABLED_KEY] ?: false,
             reminderHour = preferences[REMINDER_HOUR_KEY] ?: 20,
-            reminderMinute = preferences[REMINDER_MINUTE_KEY] ?: 0
+            reminderMinute = preferences[REMINDER_MINUTE_KEY] ?: 0,
+            seedType = preferences[SEED_TYPE_KEY] ?: "flower"
         )
     }
 
@@ -96,6 +99,10 @@ class SettingsRepository(private val context: Context) {
             it[REMINDER_HOUR_KEY] = hour
             it[REMINDER_MINUTE_KEY] = minute
         }
+    }
+
+    suspend fun updateSeedType(type: String) {
+        context.dataStore.edit { it[SEED_TYPE_KEY] = type }
     }
 
     suspend fun recordSessionCompletion(minutesMeditated: Int) {
