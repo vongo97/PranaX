@@ -16,6 +16,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.breathingapp.domain.BreathingPattern
 import com.example.breathingapp.ui.settings.SettingsViewModel
 import com.example.breathingapp.ui.settings.SettingsViewModelFactory
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,7 +43,10 @@ fun SessionPrepScreen(
                 title = { Text(pattern.name) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Text("⬅️")
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "Atrás"
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
