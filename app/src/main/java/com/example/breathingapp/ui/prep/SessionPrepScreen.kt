@@ -110,6 +110,18 @@ fun SessionPrepScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Text("Meditación Guiada 🗣️", style = MaterialTheme.typography.titleMedium)
+                        Switch(
+                            checked = settings.isGuidedMeditationEnabled,
+                            onCheckedChange = { coroutineScope.launch { repository.updateGuidedMeditation(it) } }
+                        )
+                    }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text("Vibrar ⚙️", style = MaterialTheme.typography.titleMedium)
                         Switch(
                             checked = settings.isVibrationEnabled,
@@ -156,7 +168,7 @@ fun SessionPrepScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(32.dp))
 
             Button(
                 onClick = {

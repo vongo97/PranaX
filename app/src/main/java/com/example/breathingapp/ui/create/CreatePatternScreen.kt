@@ -28,6 +28,7 @@ fun CreatePatternScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .statusBarsPadding()
             .verticalScroll(rememberScrollState())
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)
@@ -52,7 +53,7 @@ fun CreatePatternScreen(
         TimeSliderConfig("Exhalar", exhaleSec) { exhaleSec = it }
         TimeSliderConfig("Retener (sin aire)", holdOutSec) { holdOutSec = it }
 
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(24.dp))
 
         Button(
             onClick = {

@@ -22,45 +22,37 @@ class ReminderReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action
-        if (action == Intent.ACTION_BOOT_COMPLETED) {
-            // Reprogramar recordatorio tras reinicio si estaba activado
-            val repository = SettingsRepository(context)
+        android.util.Log.d("ReminderReceiver", "¡Broadcast recibido! Acción: $action")
+        
+        if (action == Intent.ACTION_BOOT_COMPLETED || action == ACTION_SHOW_REMINDER) {
+            val pendingResult = goAsync()
             CoroutineScope(Dispatchers.IO).launch {
-                val settings = repository.settingsFlow.first()
-                if (settings.isReminderEnabled) {
-                    scheduleReminder(context, settings.reminderHour, settings.reminderMinute)
-                }
-            }
-        } else if (action == ACTION_SHOW_REMINDER) {
-            // Mostrar la notificación
-            showNotification(context)
-            
-            // Re-programar la alarma para el día siguiente
-            val repository = SettingsRepository(context)
-            CoroutineScope(Dispatchers.IO).launch {
-                val settings = repository.settingsFlow.first()
-                if (settings.isReminderEnabled) {
-                    scheduleReminder(context, settings.reminderHour, settings.reminderMinute)
+                try {
+                    if (action == ACTION_SHOW_REMINDER) {
+                        android.util.Log.d("ReminderReceiver", "Procesando ACTION_SHOW_REMINDER. Mostrando notificación...")
+                        showNotification(context)
+                    }
+                    
+                    // Reprogramar recordatorio si está activo
+                    val repository = SettingsRepository(context)
+                    val settings = repository.settingsFlow.first()
+                    if (settings.isReminderEnabled) {
+                        android.util.Log.d("ReminderReceiver", "Reprogramando recordatorio diario...")
+                        scheduleReminder(context, settings.reminderHour, settings.reminderMinute)
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("ReminderReceiver", "Error en ReminderReceiver onReceive asíncrono", e)
+                } finally {
+                    pendingResult.finish()
                 }
             }
         }
     }
 
     private fun showNotification(context: Context) {
-        val channelId = "daily_breathing_reminder"
+        val channelId = "daily_breathing_reminder_v2"
+        android.util.Log.d("ReminderReceiver", "showNotification iniciada con canal: $channelId")
         
-        // Crear canal de notificación para Android 8.0+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val name = "Recordatorios de Respiración"
-            val descriptionText = "Notificaciones para recordar tu práctica diaria de respiración."
-            val importance = NotificationManager.IMPORTANCE_DEFAULT
-            val channel = NotificationChannel(channelId, name, importance).apply {
-                description = descriptionText
-            }
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.createNotificationChannel(channel)
-        }
-
         // Intent para abrir MainActivity al presionar la notificación
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -72,24 +64,56 @@ class ReminderReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val largeIcon = try {
+            android.graphics.BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher)
+        } catch (e: Exception) {
+            null
+        }
+
         val builder = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(R.mipmap.ic_launcher) // Ícono por defecto
+            .setSmallIcon(R.mipmap.ic_launcher_foreground) // Ícono de Prana plano compatible
+            .apply {
+                if (largeIcon != null) {
+                    setLargeIcon(largeIcon)
+                }
+            }
             .setContentTitle("Momento de respirar... 🌱")
             .setContentText("Tómate 5 minutos para relajarte, respirar y regar tu planta hoy.")
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_HIGH) // Prioridad alta para heads-up banner
+            .setDefaults(NotificationCompat.DEFAULT_ALL)   // Sonido, vibración y luces por defecto
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
 
         try {
-            val notificationManager = NotificationManagerCompat.from(context)
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            
+            // Verificar si el canal existe (para estar seguros)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = notificationManager.getNotificationChannel(channelId)
+                if (channel == null) {
+                    android.util.Log.e("ReminderReceiver", "¡Error! El canal de notificación $channelId no existe en el sistema.")
+                } else {
+                    android.util.Log.d("ReminderReceiver", "Canal $channelId encontrado. Importancia: ${channel.importance}")
+                }
+            }
+
             // Verificar permiso de notificación para Android 13+
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
-            ) {
+            } else {
+                true
+            }
+
+            android.util.Log.d("ReminderReceiver", "¿Tiene permiso de notificación? $hasPermission")
+            if (hasPermission) {
                 notificationManager.notify(NOTIFICATION_ID, builder.build())
+                android.util.Log.d("ReminderReceiver", "Llamada a notify() realizada con éxito.")
+            } else {
+                android.util.Log.e("ReminderReceiver", "No se puede mostrar la notificación: Permiso denegado.")
             }
         } catch (e: Exception) {
-            // Manejar fallas de notificación
+            // Loguear el error para diagnóstico
+            android.util.Log.e("ReminderReceiver", "Error al publicar la notificación", e)
         }
     }
 
@@ -125,19 +149,36 @@ class ReminderReceiver : BroadcastReceiver() {
                 }
             }
 
-            // Programar con alta precisión
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    calendar.timeInMillis,
-                    pendingIntent
-                )
-            } else {
-                alarmManager.setExact(
-                    AlarmManager.RTC_WAKEUP,
-                    calendar.timeInMillis,
-                    pendingIntent
-                )
+            try {
+                // Intentar programar con alta precisión (exacta)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    alarmManager.setExactAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        calendar.timeInMillis,
+                        pendingIntent
+                    )
+                } else {
+                    alarmManager.setExact(
+                        AlarmManager.RTC_WAKEUP,
+                        calendar.timeInMillis,
+                        pendingIntent
+                    )
+                }
+            } catch (e: SecurityException) {
+                // Fallback seguro a alarma no exacta si no tiene el permiso concedido
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    alarmManager.setAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        calendar.timeInMillis,
+                        pendingIntent
+                    )
+                } else {
+                    alarmManager.set(
+                        AlarmManager.RTC_WAKEUP,
+                        calendar.timeInMillis,
+                        pendingIntent
+                    )
+                }
             }
         }
 

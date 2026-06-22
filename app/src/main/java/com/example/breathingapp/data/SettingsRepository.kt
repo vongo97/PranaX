@@ -1,9 +1,12 @@
 package com.example.breathingapp.data
 
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -22,10 +25,16 @@ data class AppSettings(
     val reminderHour: Int = 20,
     val reminderMinute: Int = 0,
     val seedType: String = "flower", // flower, bonsai, cactus
-    val backgroundAudioType: String = "forest" // forest, rain, ocean
+    val backgroundAudioType: String = "forest", // forest, rain, ocean
+    val isGuidedMeditationEnabled: Boolean = false,
+    val loggedInUserEmail: String? = null
 )
 
+private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "settings_preferences")
+
 class SettingsRepository(private val context: Context) {
+    
+    private val dataStore = context.settingsDataStore
     
     private val DARK_MODE_KEY = booleanPreferencesKey("dark_mode")
     private val BELL_KEY = booleanPreferencesKey("bell_enabled")
@@ -42,8 +51,10 @@ class SettingsRepository(private val context: Context) {
     private val REMINDER_MINUTE_KEY = androidx.datastore.preferences.core.intPreferencesKey("reminder_minute")
     private val SEED_TYPE_KEY = stringPreferencesKey("seed_type")
     private val BACKGROUND_AUDIO_TYPE_KEY = stringPreferencesKey("background_audio_type")
+    private val GUIDED_MEDITATION_KEY = booleanPreferencesKey("guided_meditation_enabled")
+    private val LOGGED_IN_USER_EMAIL_KEY = stringPreferencesKey("logged_in_user_email")
 
-    val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { preferences ->
+    val settingsFlow: Flow<AppSettings> = dataStore.data.map { preferences ->
         AppSettings(
             isDarkMode = preferences[DARK_MODE_KEY] ?: false,
             isBellEnabled = preferences[BELL_KEY] ?: true,
@@ -59,28 +70,30 @@ class SettingsRepository(private val context: Context) {
             reminderHour = preferences[REMINDER_HOUR_KEY] ?: 20,
             reminderMinute = preferences[REMINDER_MINUTE_KEY] ?: 0,
             seedType = preferences[SEED_TYPE_KEY] ?: "flower",
-            backgroundAudioType = preferences[BACKGROUND_AUDIO_TYPE_KEY] ?: "forest"
+            backgroundAudioType = preferences[BACKGROUND_AUDIO_TYPE_KEY] ?: "forest",
+            isGuidedMeditationEnabled = preferences[GUIDED_MEDITATION_KEY] ?: false,
+            loggedInUserEmail = preferences[LOGGED_IN_USER_EMAIL_KEY]
         )
     }
 
     suspend fun updateDarkMode(enabled: Boolean) {
-        context.dataStore.edit { it[DARK_MODE_KEY] = enabled }
+        dataStore.edit { it[DARK_MODE_KEY] = enabled }
     }
 
     suspend fun updateBell(enabled: Boolean) {
-        context.dataStore.edit { it[BELL_KEY] = enabled }
+        dataStore.edit { it[BELL_KEY] = enabled }
     }
 
     suspend fun updateBackground(enabled: Boolean) {
-        context.dataStore.edit { it[BACKGROUND_KEY] = enabled }
+        dataStore.edit { it[BACKGROUND_KEY] = enabled }
     }
 
     suspend fun updateVibration(enabled: Boolean) {
-        context.dataStore.edit { it[VIBRATION_KEY] = enabled }
+        dataStore.edit { it[VIBRATION_KEY] = enabled }
     }
 
     suspend fun updateBackgroundUri(uri: String?) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             if (uri == null) {
                 preferences.remove(BACKGROUND_URI_KEY)
             } else {
@@ -90,30 +103,42 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun updateBellType(type: String) {
-        context.dataStore.edit { it[BELL_TYPE_KEY] = type }
+        dataStore.edit { it[BELL_TYPE_KEY] = type }
     }
 
     suspend fun updateReminderEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[REMINDER_ENABLED_KEY] = enabled }
+        dataStore.edit { it[REMINDER_ENABLED_KEY] = enabled }
     }
 
     suspend fun updateReminderTime(hour: Int, minute: Int) {
-        context.dataStore.edit {
+        dataStore.edit {
             it[REMINDER_HOUR_KEY] = hour
             it[REMINDER_MINUTE_KEY] = minute
         }
     }
 
     suspend fun updateSeedType(type: String) {
-        context.dataStore.edit { it[SEED_TYPE_KEY] = type }
+        dataStore.edit { it[SEED_TYPE_KEY] = type }
     }
 
     suspend fun updateBackgroundAudioType(type: String) {
-        context.dataStore.edit { it[BACKGROUND_AUDIO_TYPE_KEY] = type }
+        dataStore.edit { it[BACKGROUND_AUDIO_TYPE_KEY] = type }
+    }
+
+    suspend fun updateGuidedMeditation(enabled: Boolean) {
+        dataStore.edit { it[GUIDED_MEDITATION_KEY] = enabled }
+    }
+
+    suspend fun restoreStats(streak: Int, sessions: Int, minutes: Int) {
+        dataStore.edit { preferences ->
+            preferences[DAILY_STREAK_KEY] = streak
+            preferences[SESSIONS_COUNT_KEY] = sessions
+            preferences[TOTAL_MINUTES_KEY] = minutes
+        }
     }
 
     suspend fun recordSessionCompletion(minutesMeditated: Int) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             // Increment total count
             val currentCount = preferences[SESSIONS_COUNT_KEY] ?: 0
             preferences[SESSIONS_COUNT_KEY] = currentCount + 1
@@ -143,6 +168,16 @@ class SettingsRepository(private val context: Context) {
                     preferences[DAILY_STREAK_KEY] = 1 // Reset streak to 1
                 }
                 preferences[LAST_DATE_KEY] = today
+            }
+        }
+    }
+
+    suspend fun updateLoggedInUserEmail(email: String?) {
+        dataStore.edit { preferences ->
+            if (email == null) {
+                preferences.remove(LOGGED_IN_USER_EMAIL_KEY)
+            } else {
+                preferences[LOGGED_IN_USER_EMAIL_KEY] = email
             }
         }
     }

@@ -14,14 +14,15 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 // Extension property to get DataStore instance from Context
-val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "breathing_patterns")
+private val Context.patternsDataStore: DataStore<Preferences> by preferencesDataStore(name = "breathing_patterns")
 
 class BreathingPatternRepository(private val context: Context) {
     
+    private val dataStore = context.patternsDataStore
     private val CUSTOM_PATTERNS_KEY = stringPreferencesKey("custom_patterns")
 
     // Flow that emits the combined list of predefined + custom patterns
-    val allPatterns: Flow<List<BreathingPattern>> = context.dataStore.data.map { preferences ->
+    val allPatterns: Flow<List<BreathingPattern>> = dataStore.data.map { preferences ->
         val customPatternsJson = preferences[CUSTOM_PATTERNS_KEY] ?: "[]"
         val customPatterns = try {
             Json.decodeFromString<List<BreathingPattern>>(customPatternsJson)
@@ -34,7 +35,7 @@ class BreathingPatternRepository(private val context: Context) {
     }
 
     suspend fun saveCustomPattern(pattern: BreathingPattern) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             val customPatternsJson = preferences[CUSTOM_PATTERNS_KEY] ?: "[]"
             val currentPatterns = try {
                 Json.decodeFromString<List<BreathingPattern>>(customPatternsJson).toMutableList()

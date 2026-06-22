@@ -3,6 +3,7 @@ package com.example.breathingapp.ui.settings
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -13,16 +14,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import com.example.breathingapp.data.SettingsRepository
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.breathingapp.data.ReminderReceiver
 import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsScreen(modifier: Modifier = Modifier) {
+fun SettingsScreen(
+    onNavigateToProfile: () -> Unit,
+    modifier: Modifier = Modifier,
+    viewModel: SettingsViewModel = viewModel()
+) {
     val context = LocalContext.current
-    val repository = remember { SettingsRepository(context) }
-    val settings by repository.settingsFlow.collectAsState(initial = com.example.breathingapp.data.AppSettings())
-    val coroutineScope = rememberCoroutineScope()
+    val settings by viewModel.settings.collectAsState()
 
     var darkModeEnabled = settings.isDarkMode
     var bellEnabled = settings.isBellEnabled
@@ -33,7 +36,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         contract = ActivityResultContracts.PickVisualMedia(),
         onResult = { uri ->
             if (uri != null) {
-                coroutineScope.launch { repository.updateBackgroundUri(uri.toString()) }
+                viewModel.updateBackgroundUri(uri.toString())
             }
         }
     )
@@ -43,35 +46,57 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         contract = ActivityResultContracts.RequestPermission(),
         onResult = { isGranted ->
             if (isGranted) {
-                coroutineScope.launch {
-                    repository.updateReminderEnabled(true)
-                    ReminderReceiver.scheduleReminder(context, settings.reminderHour, settings.reminderMinute)
+                // Verificar alarmas exactas (Android 12+)
+                val alarmManager = context.getSystemService(android.content.Context.ALARM_SERVICE) as? android.app.AlarmManager
+                val canScheduleExact = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    alarmManager?.canScheduleExactAlarms() == true
+                } else {
+                    true
                 }
+
+                if (!canScheduleExact && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    try {
+                        val intent = android.content.Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                            data = android.net.Uri.fromParts("package", context.packageName, null)
+                            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                        }
+                        context.startActivity(intent)
+                        android.widget.Toast.makeText(
+                            context,
+                            "Activa 'Alarmas y recordatorios' para sonar a la hora exacta",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    } catch (e: Exception) {
+                        // Fallback seguro
+                    }
+                }
+
+                viewModel.updateReminderEnabled(true)
+                ReminderReceiver.scheduleReminder(context, settings.reminderHour, settings.reminderMinute)
             }
         }
     )
 
-    // Configuración del diálogo de selección de hora nativo
+    // Configuración del diálogo de selección de hora nativo (formato de 12 horas AM/PM)
     val timePickerDialog = remember(settings.reminderHour, settings.reminderMinute) {
         android.app.TimePickerDialog(
             context,
             { _, hourOfDay, minuteOfHour ->
-                coroutineScope.launch {
-                    repository.updateReminderTime(hourOfDay, minuteOfHour)
-                    if (settings.isReminderEnabled) {
-                        ReminderReceiver.scheduleReminder(context, hourOfDay, minuteOfHour)
-                    }
+                viewModel.updateReminderTime(hourOfDay, minuteOfHour)
+                if (settings.isReminderEnabled) {
+                    ReminderReceiver.scheduleReminder(context, hourOfDay, minuteOfHour)
                 }
             },
             settings.reminderHour,
             settings.reminderMinute,
-            true // formato de 24 horas
+            false // formato de 12 horas (AM/PM)
         )
     }
 
     Column(
         modifier = modifier
             .fillMaxSize()
+            .statusBarsPadding()
             .verticalScroll(rememberScrollState())
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -87,6 +112,14 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             SettingsInfoItem(title = "Racha Actual", value = "${settings.dailyStreak} días")
             SettingsInfoItem(title = "Sesiones Totales", value = "${settings.completedSessionsCount}")
             SettingsInfoItem(title = "Tiempo Meditado", value = "${settings.totalMinutesMeditated} min")
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(
+                onClick = onNavigateToProfile,
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.small
+            ) {
+                Text("Sincronizar en la Nube ☁️")
+            }
         }
 
         SettingsSection(title = "Personalización") {
@@ -95,7 +128,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 subtitle = "Cambiar entre modo claro y oscuro",
                 checked = darkModeEnabled,
                 onCheckedChange = { 
-                    coroutineScope.launch { repository.updateDarkMode(it) } 
+                    viewModel.updateDarkMode(it) 
                 }
             )
             SettingsItemClickable(
@@ -111,15 +144,15 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             
             Text("O elegir un fondo relajante:", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Button(onClick = { coroutineScope.launch { repository.updateBackgroundUri("android.resource://com.example.breathingapp/drawable/bg_forest") } }) { Text("Bosque") }
-                Button(onClick = { coroutineScope.launch { repository.updateBackgroundUri("android.resource://com.example.breathingapp/drawable/bg_ocean") } }) { Text("Océano") }
+                Button(onClick = { viewModel.updateBackgroundUri("android.resource://com.example.breathingapp/drawable/bg_forest") }) { Text("Bosque") }
+                Button(onClick = { viewModel.updateBackgroundUri("android.resource://com.example.breathingapp/drawable/bg_ocean") }) { Text("Océano") }
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Button(onClick = { coroutineScope.launch { repository.updateBackgroundUri("android.resource://com.example.breathingapp/drawable/bg_night") } }) { Text("Noche") }
-                Button(onClick = { coroutineScope.launch { repository.updateBackgroundUri("android.resource://com.example.breathingapp/drawable/bg_mountains") } }) { Text("Montañas") }
+                Button(onClick = { viewModel.updateBackgroundUri("android.resource://com.example.breathingapp/drawable/bg_night") }) { Text("Noche") }
+                Button(onClick = { viewModel.updateBackgroundUri("android.resource://com.example.breathingapp/drawable/bg_mountains") }) { Text("Montañas") }
             }
             Button(
-                onClick = { coroutineScope.launch { repository.updateBackgroundUri(null) } },
+                onClick = { viewModel.updateBackgroundUri(null) },
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
             ) { Text("Quitar Fondo") }
@@ -132,36 +165,69 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 checked = settings.isReminderEnabled,
                 onCheckedChange = { enabled ->
                     if (enabled) {
-                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                            val permission = android.Manifest.permission.POST_NOTIFICATIONS
-                            val isGranted = context.checkSelfPermission(permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                            if (isGranted) {
-                                coroutineScope.launch {
-                                    repository.updateReminderEnabled(true)
-                                    ReminderReceiver.scheduleReminder(context, settings.reminderHour, settings.reminderMinute)
-                                }
-                            } else {
-                                permissionLauncher.launch(permission)
+                        val hasNotificationPermission = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                            context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                        } else {
+                            true
+                        }
+
+                        if (!hasNotificationPermission) {
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                                permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                             }
                         } else {
-                            coroutineScope.launch {
-                                repository.updateReminderEnabled(true)
-                                ReminderReceiver.scheduleReminder(context, settings.reminderHour, settings.reminderMinute)
+                            // Verificar alarmas exactas (Android 12+)
+                            val alarmManager = context.getSystemService(android.content.Context.ALARM_SERVICE) as? android.app.AlarmManager
+                            val canScheduleExact = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                                alarmManager?.canScheduleExactAlarms() == true
+                            } else {
+                                true
                             }
+
+                            if (!canScheduleExact && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                                try {
+                                    val intent = android.content.Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                        data = android.net.Uri.fromParts("package", context.packageName, null)
+                                        flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                    }
+                                    context.startActivity(intent)
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "Activa 'Alarmas y recordatorios' para sonar a la hora exacta",
+                                        android.widget.Toast.LENGTH_LONG
+                                    ).show()
+                                } catch (e: Exception) {
+                                    // Fallback seguro
+                                }
+                            }
+
+                            viewModel.updateReminderEnabled(true)
+                            ReminderReceiver.scheduleReminder(context, settings.reminderHour, settings.reminderMinute)
                         }
                     } else {
-                        coroutineScope.launch {
-                            repository.updateReminderEnabled(false)
-                            ReminderReceiver.cancelReminder(context)
-                        }
+                        viewModel.updateReminderEnabled(false)
+                        ReminderReceiver.cancelReminder(context)
                     }
                 }
             )
             
             if (settings.isReminderEnabled) {
+                val formattedHour = remember(settings.reminderHour, settings.reminderMinute) {
+                    val hour = settings.reminderHour
+                    val minute = settings.reminderMinute
+                    val suffix = if (hour >= 12) "PM" else "AM"
+                    val displayHour = when {
+                        hour == 0 -> 12
+                        hour > 12 -> hour - 12
+                        else -> hour
+                    }
+                    val displayMinute = minute.toString().padStart(2, '0')
+                    "$displayHour:$displayMinute $suffix"
+                }
+
                 SettingsItemClickable(
                     title = "Hora de Alarma",
-                    subtitle = "Programado a las ${settings.reminderHour.toString().padStart(2, '0')}:${settings.reminderMinute.toString().padStart(2, '0')}"
+                    subtitle = "Programado a las $formattedHour"
                 ) {
                     timePickerDialog.show()
                 }
@@ -170,11 +236,19 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
 
         SettingsSection(title = "Experiencia") {
             SettingsSwitch(
+                title = "Meditación Guiada",
+                subtitle = "Instrucciones de voz relajantes durante tu sesión",
+                checked = settings.isGuidedMeditationEnabled,
+                onCheckedChange = { 
+                    viewModel.updateGuidedMeditation(it) 
+                }
+            )
+            SettingsSwitch(
                 title = "Campana Guía",
                 subtitle = "Efectos de sonido al respirar",
                 checked = bellEnabled,
                 onCheckedChange = { 
-                    coroutineScope.launch { repository.updateBell(it) } 
+                    viewModel.updateBell(it) 
                 }
             )
             SettingsSwitch(
@@ -182,7 +256,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 subtitle = "Reproducir un sonido ambiental relajante durante el ejercicio",
                 checked = backgroundAudioEnabled,
                 onCheckedChange = { 
-                    coroutineScope.launch { repository.updateBackground(it) } 
+                    viewModel.updateBackground(it) 
                 }
             )
 
@@ -193,23 +267,25 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                     modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
                 )
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     FilterChip(
                         selected = settings.backgroundAudioType == "forest",
-                        onClick = { coroutineScope.launch { repository.updateBackgroundAudioType("forest") } },
+                        onClick = { viewModel.updateBackgroundAudioType("forest") },
                         label = { Text("🌲 Bosque") }
                     )
                     FilterChip(
                         selected = settings.backgroundAudioType == "rain",
-                        onClick = { coroutineScope.launch { repository.updateBackgroundAudioType("rain") } },
+                        onClick = { viewModel.updateBackgroundAudioType("rain") },
                         label = { Text("🌧️ Lluvia") }
                     )
                     FilterChip(
                         selected = settings.backgroundAudioType == "ocean",
-                        onClick = { coroutineScope.launch { repository.updateBackgroundAudioType("ocean") } },
+                        onClick = { viewModel.updateBackgroundAudioType("ocean") },
                         label = { Text("🌊 Océano") }
                     )
                 }
@@ -219,7 +295,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 subtitle = "Vibraciones al cambiar de fase",
                 checked = vibrationEnabled,
                 onCheckedChange = { 
-                    coroutineScope.launch { repository.updateVibration(it) } 
+                    viewModel.updateVibration(it) 
                 }
             )
         }

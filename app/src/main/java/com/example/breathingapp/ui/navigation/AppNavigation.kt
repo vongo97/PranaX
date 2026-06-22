@@ -1,6 +1,7 @@
 package com.example.breathingapp.ui.navigation
 
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -17,8 +18,10 @@ import com.example.breathingapp.ui.main.MainScreen
 import com.example.breathingapp.ui.prep.SessionPrepScreen
 import com.example.breathingapp.ui.settings.SettingsScreen
 import com.example.breathingapp.ui.garden.GardenScreen
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.breathingapp.domain.BreathingPattern
-import com.example.breathingapp.data.SettingsRepository
+import com.example.breathingapp.ui.settings.SettingsViewModel
+import com.example.breathingapp.ui.profile.ProfileViewModel
 import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.layout.Box
@@ -29,16 +32,37 @@ import com.example.breathingapp.HomeRoute
 import com.example.breathingapp.CreateRoute
 import com.example.breathingapp.GardenRoute
 import com.example.breathingapp.SettingsRoute
+import com.example.breathingapp.ProfileRoute
 import com.example.breathingapp.PrepRoute
 import com.example.breathingapp.BreathingRoute
+import com.example.breathingapp.ui.profile.ProfileScreen
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Settings
 
 @Composable
-fun AppNavigation() {
+fun AppNavigation(
+    settingsViewModel: SettingsViewModel = viewModel(),
+    profileViewModel: ProfileViewModel = viewModel()
+) {
     val navController = rememberNavController()
     val context = LocalContext.current
     val repository = remember { BreathingPatternRepository(context) }
-    val settingsRepository = remember { SettingsRepository(context) }
-    val settings by settingsRepository.settingsFlow.collectAsState(initial = com.example.breathingapp.data.AppSettings())
+    val settings by settingsViewModel.settings.collectAsState()
+
+    // Sincronización automática de base de datos en el arranque si está logueado
+    LaunchedEffect(settings.loggedInUserEmail) {
+        val email = settings.loggedInUserEmail
+        if (email != null) {
+            profileViewModel.syncStats(
+                streak = settings.dailyStreak,
+                sessions = settings.completedSessionsCount,
+                minutes = settings.totalMinutesMeditated
+            ) { /* No-op, el estado se actualiza en settingsFlow en segundo plano */ }
+        }
+    }
     
     // Check which route we are on to show/hide bottom bar
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -52,15 +76,27 @@ fun AppNavigation() {
     val showBottomBar = isHomeSelected || isCreateSelected || isGardenSelected || isSettingsSelected
 
     Scaffold(
+        modifier = Modifier.fillMaxSize(),
         containerColor = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onBackground,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (showBottomBar) {
-                NavigationBar {
+                NavigationBar(
+                    containerColor = Color(0xFF0D1411),
+                    tonalElevation = 0.dp
+                ) {
                     NavigationBarItem(
-                        icon = { Text("🏡") },
+                        icon = { Icon(Icons.Default.Home, contentDescription = "Ejercicios") },
                         label = { Text("Ejercicios") },
                         selected = isHomeSelected,
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            indicatorColor = Color.Transparent
+                        ),
                         onClick = {
                             navController.navigate(HomeRoute) {
                                 popUpTo(HomeRoute) { saveState = true }
@@ -70,9 +106,16 @@ fun AppNavigation() {
                         }
                     )
                     NavigationBarItem(
-                        icon = { Text("➕") },
+                        icon = { Icon(Icons.Default.Add, contentDescription = "Crear") },
                         label = { Text("Crear") },
                         selected = isCreateSelected,
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            indicatorColor = Color.Transparent
+                        ),
                         onClick = {
                             navController.navigate(CreateRoute) {
                                 popUpTo(HomeRoute) { saveState = true }
@@ -82,9 +125,16 @@ fun AppNavigation() {
                         }
                     )
                     NavigationBarItem(
-                        icon = { Text("🌱") },
+                        icon = { Icon(Icons.Default.Favorite, contentDescription = "Jardín") },
                         label = { Text("Jardín") },
                         selected = isGardenSelected,
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            indicatorColor = Color.Transparent
+                        ),
                         onClick = {
                             navController.navigate(GardenRoute) {
                                 popUpTo(HomeRoute) { saveState = true }
@@ -94,9 +144,16 @@ fun AppNavigation() {
                         }
                     )
                     NavigationBarItem(
-                        icon = { Text("⚙️") },
+                        icon = { Icon(Icons.Default.Settings, contentDescription = "Ajustes") },
                         label = { Text("Ajustes") },
                         selected = isSettingsSelected,
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            indicatorColor = Color.Transparent
+                        ),
                         onClick = {
                             navController.navigate(SettingsRoute) {
                                 popUpTo(HomeRoute) { saveState = true }
@@ -125,7 +182,9 @@ fun AppNavigation() {
             NavHost(
                 navController = navController,
                 startDestination = HomeRoute,
-                modifier = Modifier.padding(innerPadding).fillMaxSize()
+                modifier = Modifier
+                    .padding(bottom = innerPadding.calculateBottomPadding())
+                    .fillMaxSize()
             ) {
                 composable<HomeRoute> {
                     val patterns by repository.allPatterns.collectAsState(initial = emptyList())
@@ -179,7 +238,10 @@ fun AppNavigation() {
                     GardenScreen()
                 }
                 composable<SettingsRoute> {
-                    SettingsScreen()
+                    SettingsScreen(onNavigateToProfile = { navController.navigate(ProfileRoute) })
+                }
+                composable<ProfileRoute> {
+                    ProfileScreen(onBack = { navController.popBackStack() })
                 }
                 composable<BreathingRoute> { backStackEntry ->
                     val breathingRoute = backStackEntry.toRoute<BreathingRoute>()

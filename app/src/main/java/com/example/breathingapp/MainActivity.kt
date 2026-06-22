@@ -21,7 +21,22 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
-    enableEdgeToEdge()
+    androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+    window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS)
+    window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+    window.statusBarColor = android.graphics.Color.TRANSPARENT
+    window.navigationBarColor = 0xFF0D1411.toInt()
+
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+        val layoutParams = window.attributes
+        layoutParams.layoutInDisplayCutoutMode =
+            android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        window.attributes = layoutParams
+    }
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+        window.isNavigationBarContrastEnforced = false
+        window.isStatusBarContrastEnforced = false
+    }
     setContent {
       val context = LocalContext.current
       val settingsRepository = SettingsRepository(context)

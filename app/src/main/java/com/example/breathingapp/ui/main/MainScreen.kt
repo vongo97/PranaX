@@ -10,8 +10,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
 import com.example.breathingapp.domain.BreathingPattern
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     patterns: List<BreathingPattern>,
@@ -21,7 +23,9 @@ fun MainScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .statusBarsPadding()
+            .padding(horizontal = 16.dp)
+            .padding(top = 16.dp)
     ) {
         Text(
             text = "Ejercicios de Respiración",
@@ -31,10 +35,15 @@ fun MainScreen(
         )
 
         LazyColumn(
+            modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(patterns) { pattern ->
                 PatternCard(pattern = pattern, onClick = { onPatternClick(pattern) })
+            }
+            // Espacio al final para que el scroll libre no sea tapado por la NavigationBar
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }

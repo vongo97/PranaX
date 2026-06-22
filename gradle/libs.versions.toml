@@ -1,5 +1,5 @@
 [versions]
-androidGradlePlugin = "9.0.1"
+androidGradlePlugin = "9.2.1"
 androidxCore = "1.18.0"
 androidxLifecycle = "2.10.0"
 androidxActivity = "1.13.0"
@@ -17,6 +17,9 @@ navigationCompose = "2.8.5"
 datastore = "1.1.1"
 serializationJson = "1.7.3"
 coil = "2.7.0"
+postgresql = "42.2.28"
+ktor = "3.0.0"
+playServicesAuth = "21.2.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
@@ -44,6 +47,10 @@ androidx-navigation-compose = { module = "androidx.navigation:navigation-compose
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serializationJson" }
 coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil" }
+postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
+ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
+play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "playServicesAuth" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "androidGradlePlugin" }

@@ -15,6 +15,9 @@ object GardenRoute
 object SettingsRoute
 
 @Serializable
+object ProfileRoute
+
+@Serializable
 data class PrepRoute(val patternIndex: Int)
 
 @Serializable
