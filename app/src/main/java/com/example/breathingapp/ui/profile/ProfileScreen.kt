@@ -119,7 +119,7 @@ fun ProfileScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Text("¡Sesión Iniciada! ☁️", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("¡Sesión Iniciada!", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Text("Cuenta: ${loggedInEmail ?: "Desconocida"}", style = MaterialTheme.typography.bodyLarge)
                         
                         HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
@@ -160,7 +160,7 @@ fun ProfileScreen(
                     if (uiState.isLoading) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary)
                     } else {
-                        Text("Sincronizar Ahora 🔄", style = MaterialTheme.typography.titleMedium)
+                        Text("Sincronizar Ahora", style = MaterialTheme.typography.titleMedium)
                     }
                 }
 
@@ -170,7 +170,7 @@ fun ProfileScreen(
                     shape = RoundedCornerShape(28.dp),
                     enabled = !uiState.isLoading
                 ) {
-                    Text("Cerrar Sesión 🚪", style = MaterialTheme.typography.titleMedium)
+                    Text("Cerrar Sesión", style = MaterialTheme.typography.titleMedium)
                 }
 
             } else {
