@@ -12,21 +12,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
-import com.example.breathingapp.data.SettingsRepository
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.breathingapp.domain.BreathingPattern
-import kotlinx.coroutines.launch
+import com.example.breathingapp.ui.settings.SettingsViewModel
+import com.example.breathingapp.ui.settings.SettingsViewModelFactory
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SessionPrepScreen(
     pattern: BreathingPattern,
     onStartSession: (BreathingPattern, Int) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    viewModel: SettingsViewModel = viewModel(factory = SettingsViewModelFactory(LocalContext.current))
 ) {
-    val context = LocalContext.current
-    val repository = remember { SettingsRepository(context) }
-    val settings by repository.settingsFlow.collectAsState(initial = com.example.breathingapp.data.AppSettings())
-    val coroutineScope = rememberCoroutineScope()
+    val settings by viewModel.settingsState.collectAsState()
 
     var inhaleMs by remember { mutableStateOf(pattern.inhaleMs) }
     var holdInMs by remember { mutableStateOf(pattern.holdInMs) }
@@ -113,7 +112,7 @@ fun SessionPrepScreen(
                         Text("Meditación Guiada 🗣️", style = MaterialTheme.typography.titleMedium)
                         Switch(
                             checked = settings.isGuidedMeditationEnabled,
-                            onCheckedChange = { coroutineScope.launch { repository.updateGuidedMeditation(it) } }
+                            onCheckedChange = { viewModel.updateGuidedMeditation(it) }
                         )
                     }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
@@ -125,7 +124,7 @@ fun SessionPrepScreen(
                         Text("Vibrar ⚙️", style = MaterialTheme.typography.titleMedium)
                         Switch(
                             checked = settings.isVibrationEnabled,
-                            onCheckedChange = { coroutineScope.launch { repository.updateVibration(it) } }
+                            onCheckedChange = { viewModel.updateVibration(it) }
                         )
                     }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
@@ -141,14 +140,14 @@ fun SessionPrepScreen(
                             Text("Campana Guía 🔔", style = MaterialTheme.typography.titleMedium)
                             Switch(
                                 checked = settings.isBellEnabled,
-                                onCheckedChange = { coroutineScope.launch { repository.updateBell(it) } }
+                                onCheckedChange = { viewModel.updateBell(it) }
                             )
                         }
                         
                         if (settings.isBellEnabled) {
                             BellSelector(
                                 currentType = settings.bellType,
-                                onTypeSelected = { coroutineScope.launch { repository.updateBellType(it) } }
+                                onTypeSelected = { viewModel.updateBellType(it) }
                             )
                         }
 
@@ -161,7 +160,7 @@ fun SessionPrepScreen(
                             Text("Fondo de Bosque 🌲", style = MaterialTheme.typography.titleMedium)
                             Switch(
                                 checked = settings.isBackgroundEnabled,
-                                onCheckedChange = { coroutineScope.launch { repository.updateBackground(it) } }
+                                onCheckedChange = { viewModel.updateBackground(it) }
                             )
                         }
                     }

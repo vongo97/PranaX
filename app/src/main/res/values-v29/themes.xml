@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.BreathingApp" parent="android:Theme.DeviceDefault.NoActionBar">
+    <style name="Theme.BreathingApp" parent="android:Theme.Material.NoActionBar">
         <item name="android:navigationBarColor">#0D1411</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>

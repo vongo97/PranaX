@@ -30,11 +30,10 @@ data class AppSettings(
     val loggedInUserEmail: String? = null
 )
 
+// Base de datos de preferencias exclusiva para la configuración del usuario
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "settings_preferences")
 
 class SettingsRepository(private val context: Context) {
-    
-    private val dataStore = context.settingsDataStore
     
     private val DARK_MODE_KEY = booleanPreferencesKey("dark_mode")
     private val BELL_KEY = booleanPreferencesKey("bell_enabled")
@@ -54,7 +53,7 @@ class SettingsRepository(private val context: Context) {
     private val GUIDED_MEDITATION_KEY = booleanPreferencesKey("guided_meditation_enabled")
     private val LOGGED_IN_USER_EMAIL_KEY = stringPreferencesKey("logged_in_user_email")
 
-    val settingsFlow: Flow<AppSettings> = dataStore.data.map { preferences ->
+    val settingsFlow: Flow<AppSettings> = context.settingsDataStore.data.map { preferences ->
         AppSettings(
             isDarkMode = preferences[DARK_MODE_KEY] ?: false,
             isBellEnabled = preferences[BELL_KEY] ?: true,
@@ -77,23 +76,23 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun updateDarkMode(enabled: Boolean) {
-        dataStore.edit { it[DARK_MODE_KEY] = enabled }
+        context.settingsDataStore.edit { it[DARK_MODE_KEY] = enabled }
     }
 
     suspend fun updateBell(enabled: Boolean) {
-        dataStore.edit { it[BELL_KEY] = enabled }
+        context.settingsDataStore.edit { it[BELL_KEY] = enabled }
     }
 
     suspend fun updateBackground(enabled: Boolean) {
-        dataStore.edit { it[BACKGROUND_KEY] = enabled }
+        context.settingsDataStore.edit { it[BACKGROUND_KEY] = enabled }
     }
 
     suspend fun updateVibration(enabled: Boolean) {
-        dataStore.edit { it[VIBRATION_KEY] = enabled }
+        context.settingsDataStore.edit { it[VIBRATION_KEY] = enabled }
     }
 
     suspend fun updateBackgroundUri(uri: String?) {
-        dataStore.edit { preferences ->
+        context.settingsDataStore.edit { preferences ->
             if (uri == null) {
                 preferences.remove(BACKGROUND_URI_KEY)
             } else {
@@ -103,34 +102,34 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun updateBellType(type: String) {
-        dataStore.edit { it[BELL_TYPE_KEY] = type }
+        context.settingsDataStore.edit { it[BELL_TYPE_KEY] = type }
     }
 
     suspend fun updateReminderEnabled(enabled: Boolean) {
-        dataStore.edit { it[REMINDER_ENABLED_KEY] = enabled }
+        context.settingsDataStore.edit { it[REMINDER_ENABLED_KEY] = enabled }
     }
 
     suspend fun updateReminderTime(hour: Int, minute: Int) {
-        dataStore.edit {
+        context.settingsDataStore.edit {
             it[REMINDER_HOUR_KEY] = hour
             it[REMINDER_MINUTE_KEY] = minute
         }
     }
 
     suspend fun updateSeedType(type: String) {
-        dataStore.edit { it[SEED_TYPE_KEY] = type }
+        context.settingsDataStore.edit { it[SEED_TYPE_KEY] = type }
     }
 
     suspend fun updateBackgroundAudioType(type: String) {
-        dataStore.edit { it[BACKGROUND_AUDIO_TYPE_KEY] = type }
+        context.settingsDataStore.edit { it[BACKGROUND_AUDIO_TYPE_KEY] = type }
     }
 
     suspend fun updateGuidedMeditation(enabled: Boolean) {
-        dataStore.edit { it[GUIDED_MEDITATION_KEY] = enabled }
+        context.settingsDataStore.edit { it[GUIDED_MEDITATION_KEY] = enabled }
     }
 
     suspend fun restoreStats(streak: Int, sessions: Int, minutes: Int) {
-        dataStore.edit { preferences ->
+        context.settingsDataStore.edit { preferences ->
             preferences[DAILY_STREAK_KEY] = streak
             preferences[SESSIONS_COUNT_KEY] = sessions
             preferences[TOTAL_MINUTES_KEY] = minutes
@@ -138,7 +137,7 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun recordSessionCompletion(minutesMeditated: Int) {
-        dataStore.edit { preferences ->
+        context.settingsDataStore.edit { preferences ->
             // Increment total count
             val currentCount = preferences[SESSIONS_COUNT_KEY] ?: 0
             preferences[SESSIONS_COUNT_KEY] = currentCount + 1
@@ -173,7 +172,7 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun updateLoggedInUserEmail(email: String?) {
-        dataStore.edit { preferences ->
+        context.settingsDataStore.edit { preferences ->
             if (email == null) {
                 preferences.remove(LOGGED_IN_USER_EMAIL_KEY)
             } else {

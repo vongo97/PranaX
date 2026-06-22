@@ -14,15 +14,18 @@ data class UserStatsRow(
     val total_minutes: Int
 )
 
-class NeonSyncRepository(
-    private val context: Context,
-    private val settingsRepository: SettingsRepository = SettingsRepository(context)
-) {
+class NeonSyncRepository(private val settingsRepository: SettingsRepository) {
 
+    // Constructor secundario para mantener compatibilidad con llamadas que usan Context
+    constructor(context: Context) : this(SettingsRepository(context))
+
+    /**
+     * Aplica hashing SHA-256 a la contraseña utilizando el correo electrónico del usuario como sal (salt).
+     * Esto previene ataques de diccionario y rainbow tables al asegurar hashes únicos.
+     */
     private fun hashPassword(password: String, email: String): String {
-        val salt = "PranaCalmBreathingAppSaltSecretString_" + email.lowercase().trim()
-        val saltedPassword = password + salt
-        val bytes = saltedPassword.toByteArray()
+        val salt = email.lowercase().trim()
+        val bytes = (password + salt).toByteArray()
         val md = MessageDigest.getInstance("SHA-256")
         val digest = md.digest(bytes)
         return digest.fold("") { str, it -> str + "%02x".format(it) }
@@ -49,7 +52,7 @@ class NeonSyncRepository(
                 throw Exception("El correo ya está registrado")
             }
             
-            // Insert new user
+            // Insert new user with salted password hash
             NeonDatabaseClient.execute(
                 "INSERT INTO users (email, password) VALUES ($1, $2)",
                 listOf(cleanEmail, hashPassword(password, cleanEmail))
@@ -68,10 +71,34 @@ class NeonSyncRepository(
     suspend fun signIn(email: String, password: String): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             val cleanEmail = email.lowercase().trim()
-            val result = NeonDatabaseClient.execute(
+            
+            // 1. Intentar iniciar sesión usando el nuevo hash con sal
+            var result = NeonDatabaseClient.execute(
                 "SELECT 1 FROM users WHERE email = $1 AND password = $2",
                 listOf(cleanEmail, hashPassword(password, cleanEmail))
             )
+            
+            // 2. Si no se encuentra, verificar si existe con el formato de hash anterior (sin sal) para migración transparente
+            if (result.isEmpty()) {
+                val oldHash = MessageDigest.getInstance("SHA-256")
+                    .digest(password.toByteArray())
+                    .fold("") { str, it -> str + "%02x".format(it) }
+                
+                val oldResult = NeonDatabaseClient.execute(
+                    "SELECT 1 FROM users WHERE email = $1 AND password = $2",
+                    listOf(cleanEmail, oldHash)
+                )
+                
+                if (oldResult.isNotEmpty()) {
+                    // Actualizar el hash del usuario en la base de datos de Neon de forma segura
+                    NeonDatabaseClient.execute(
+                        "UPDATE users SET password = $1 WHERE email = $2",
+                        listOf(hashPassword(password, cleanEmail), cleanEmail)
+                    )
+                    result = oldResult
+                }
+            }
+            
             if (result.isNotEmpty()) {
                 settingsRepository.updateLoggedInUserEmail(cleanEmail)
             } else {

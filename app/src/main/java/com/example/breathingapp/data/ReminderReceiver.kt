@@ -23,25 +23,24 @@ class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action
         android.util.Log.d("ReminderReceiver", "¡Broadcast recibido! Acción: $action")
-        
         if (action == Intent.ACTION_BOOT_COMPLETED || action == ACTION_SHOW_REMINDER) {
             val pendingResult = goAsync()
             CoroutineScope(Dispatchers.IO).launch {
                 try {
+                    val repository = SettingsRepository(context)
+                    val settings = repository.settingsFlow.first()
+                    
                     if (action == ACTION_SHOW_REMINDER) {
                         android.util.Log.d("ReminderReceiver", "Procesando ACTION_SHOW_REMINDER. Mostrando notificación...")
                         showNotification(context)
                     }
                     
-                    // Reprogramar recordatorio si está activo
-                    val repository = SettingsRepository(context)
-                    val settings = repository.settingsFlow.first()
                     if (settings.isReminderEnabled) {
-                        android.util.Log.d("ReminderReceiver", "Reprogramando recordatorio diario...")
+                        android.util.Log.d("ReminderReceiver", "Programando alarma diaria de recordatorio...")
                         scheduleReminder(context, settings.reminderHour, settings.reminderMinute)
                     }
                 } catch (e: Exception) {
-                    android.util.Log.e("ReminderReceiver", "Error en ReminderReceiver onReceive asíncrono", e)
+                    android.util.Log.e("ReminderReceiver", "Error procesando broadcast en segundo plano", e)
                 } finally {
                     pendingResult.finish()
                 }

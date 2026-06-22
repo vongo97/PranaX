@@ -1,5 +1,6 @@
 package com.example.breathingapp.ui.profile
 
+import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -13,25 +14,29 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.unit.sp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.example.breathingapp.BuildConfig
-import androidx.compose.ui.unit.sp
+import com.example.breathingapp.data.SettingsRepository
+import com.example.breathingapp.data.NeonSyncRepository
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: ProfileViewModel = viewModel()
+    viewModel: ProfileViewModel = viewModel(factory = ProfileViewModelFactory(LocalContext.current))
 ) {
     val context = LocalContext.current
-    val settings by viewModel.settings.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
+    val settings by viewModel.settingsState.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
 
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -55,16 +60,22 @@ fun ProfileScreen(
             val account = task.getResult(ApiException::class.java)
             val googleEmail = account?.email
             if (googleEmail != null) {
-                viewModel.signInWithGoogle(googleEmail) { syncResult ->
-                    if (syncResult.isSuccess) {
-                        Toast.makeText(context, "¡Sesión iniciada con Google! ☁️", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(context, "Error al sincronizar con Google: ${syncResult.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
-                    }
-                }
+                viewModel.signInWithGoogle(googleEmail)
             }
         } catch (e: Exception) {
             Toast.makeText(context, "Error en Google Sign-In: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    // Efecto secundario reactivo para notificaciones Toast
+    LaunchedEffect(uiState.successMessage, uiState.errorMessage) {
+        uiState.successMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            viewModel.clearMessages()
+        }
+        uiState.errorMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.clearMessages()
         }
     }
 
@@ -106,7 +117,7 @@ fun ProfileScreen(
                         Text("¡Sesión Iniciada! ☁️", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Text("Cuenta: ${loggedInEmail ?: "Desconocida"}", style = MaterialTheme.typography.bodyLarge)
                         
-                        Divider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
 
                         Text("Estadísticas Locales Actuales:", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                         Row(
@@ -135,19 +146,13 @@ fun ProfileScreen(
                             streak = settings.dailyStreak,
                             sessions = settings.completedSessionsCount,
                             minutes = settings.totalMinutesMeditated
-                        ) { syncResult ->
-                            if (syncResult.isSuccess) {
-                                Toast.makeText(context, "¡Sincronización exitosa con Neon! ⚡", Toast.LENGTH_SHORT).show()
-                            } else {
-                                Toast.makeText(context, "Error en la sincronización. Verifica tus claves o conexión.", Toast.LENGTH_LONG).show()
-                            }
-                        }
+                        )
                     },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     shape = RoundedCornerShape(28.dp),
-                    enabled = !isLoading
+                    enabled = !uiState.isLoading
                 ) {
-                    if (isLoading) {
+                    if (uiState.isLoading) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary)
                     } else {
                         Text("Sincronizar Ahora 🔄", style = MaterialTheme.typography.titleMedium)
@@ -155,14 +160,10 @@ fun ProfileScreen(
                 }
 
                 OutlinedButton(
-                    onClick = {
-                        viewModel.signOut {
-                            Toast.makeText(context, "Sesión cerrada correctamente", Toast.LENGTH_SHORT).show()
-                        }
-                    },
+                    onClick = { viewModel.signOut() },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     shape = RoundedCornerShape(28.dp),
-                    enabled = !isLoading
+                    enabled = !uiState.isLoading
                 ) {
                     Text("Cerrar Sesión 🚪", style = MaterialTheme.typography.titleMedium)
                 }
@@ -183,7 +184,7 @@ fun ProfileScreen(
                     placeholder = { Text("ejemplo@correo.com") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    enabled = !isLoading
+                    enabled = !uiState.isLoading
                 )
 
                 OutlinedTextField(
@@ -193,7 +194,7 @@ fun ProfileScreen(
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    enabled = !isLoading
+                    enabled = !uiState.isLoading
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -204,17 +205,11 @@ fun ProfileScreen(
                             Toast.makeText(context, "Por favor rellena todos los campos", Toast.LENGTH_SHORT).show()
                             return@Button
                         }
-                        viewModel.signIn(email, password) { result ->
-                            if (result.isSuccess) {
-                                Toast.makeText(context, "¡Sesión iniciada con éxito! ☁️", Toast.LENGTH_SHORT).show()
-                            } else {
-                                Toast.makeText(context, "Error: ${result.exceptionOrNull()?.message ?: "Credenciales incorrectas"}", Toast.LENGTH_LONG).show()
-                            }
-                        }
+                        viewModel.signIn(email, password)
                     },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     shape = RoundedCornerShape(28.dp),
-                    enabled = !isLoading
+                    enabled = !uiState.isLoading
                 ) {
                     Text("Iniciar Sesión", style = MaterialTheme.typography.titleMedium)
                 }
@@ -229,17 +224,17 @@ fun ProfileScreen(
                             Toast.makeText(context, "La contraseña debe tener al menos 6 caracteres", Toast.LENGTH_SHORT).show()
                             return@OutlinedButton
                         }
-                        viewModel.signUp(email, password) { result ->
-                            if (result.isSuccess) {
-                                Toast.makeText(context, "¡Usuario registrado correctamente! 🛡️", Toast.LENGTH_LONG).show()
-                            } else {
-                                Toast.makeText(context, "Error al registrarse. Verifica tus datos o conexión.", Toast.LENGTH_LONG).show()
-                            }
-                        }
+                        viewModel.signUp(
+                            email = email,
+                            password = password,
+                            currentStreak = settings.dailyStreak,
+                            currentSessions = settings.completedSessionsCount,
+                            currentMinutes = settings.totalMinutesMeditated
+                        )
                     },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     shape = RoundedCornerShape(28.dp),
-                    enabled = !isLoading
+                    enabled = !uiState.isLoading
                 ) {
                     Text("Registrarse", style = MaterialTheme.typography.titleMedium)
                 }
@@ -257,7 +252,7 @@ fun ProfileScreen(
                     },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     shape = RoundedCornerShape(28.dp),
-                    enabled = !isLoading,
+                    enabled = !uiState.isLoading,
                     colors = ButtonDefaults.outlinedButtonColors(
                         containerColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.9f)
                     )
@@ -277,5 +272,14 @@ fun ProfileScreen(
                 }
             }
         }
+    }
+}
+
+class ProfileViewModelFactory(private val context: Context) : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        val settingsRepo = SettingsRepository(context)
+        val syncRepo = NeonSyncRepository(settingsRepo)
+        return ProfileViewModel(settingsRepo, syncRepo) as T
     }
 }

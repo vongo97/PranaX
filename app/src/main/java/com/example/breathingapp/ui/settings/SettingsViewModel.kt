@@ -1,19 +1,20 @@
 package com.example.breathingapp.ui.settings
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.breathingapp.data.AppSettings
 import com.example.breathingapp.data.SettingsRepository
+import com.example.breathingapp.data.NeonSyncRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-class SettingsViewModel(application: Application) : AndroidViewModel(application) {
-    private val repository = SettingsRepository(application.applicationContext)
+class SettingsViewModel(private val repository: SettingsRepository) : ViewModel() {
 
-    val settings: StateFlow<AppSettings> = repository.settingsFlow.stateIn(
+    // Exponer el flujo de configuración como un StateFlow caliente en el scope del ViewModel
+    val settingsState: StateFlow<AppSettings> = repository.settingsFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = AppSettings()
@@ -67,9 +68,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun updateSeedType(type: String) {
+    fun updateGuidedMeditation(enabled: Boolean) {
         viewModelScope.launch {
-            repository.updateSeedType(type)
+            repository.updateGuidedMeditation(enabled)
         }
     }
 
@@ -79,9 +80,25 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun updateGuidedMeditation(enabled: Boolean) {
+    fun updateSeedType(type: String) {
         viewModelScope.launch {
-            repository.updateGuidedMeditation(enabled)
+            repository.updateSeedType(type)
+        }
+    }
+
+    fun recordSessionCompletion(minutes: Int) {
+        viewModelScope.launch {
+            repository.recordSessionCompletion(minutes)
+            val latestSettings = repository.settingsFlow.first()
+            if (latestSettings.loggedInUserEmail != null) {
+                val syncRepository = NeonSyncRepository(repository)
+                syncRepository.pushStats(
+                    streak = latestSettings.dailyStreak,
+                    sessions = latestSettings.completedSessionsCount,
+                    minutes = latestSettings.totalMinutesMeditated
+                )
+            }
         }
     }
 }
+

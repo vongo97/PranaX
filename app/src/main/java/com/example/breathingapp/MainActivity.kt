@@ -2,8 +2,10 @@ package com.example.breathingapp
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -19,24 +21,17 @@ import com.example.breathingapp.data.SettingsRepository
 
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
+    enableEdgeToEdge(
+      statusBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
+      navigationBarStyle = SystemBarStyle.dark(0xFF0D1411.toInt())
+    )
     super.onCreate(savedInstanceState)
 
-    androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
-    window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS)
-    window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
-    window.statusBarColor = android.graphics.Color.TRANSPARENT
-    window.navigationBarColor = 0xFF0D1411.toInt()
+    window.setFlags(
+        android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+        android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+    )
 
-    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-        val layoutParams = window.attributes
-        layoutParams.layoutInDisplayCutoutMode =
-            android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-        window.attributes = layoutParams
-    }
-    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-        window.isNavigationBarContrastEnforced = false
-        window.isStatusBarContrastEnforced = false
-    }
     setContent {
       val context = LocalContext.current
       val settingsRepository = SettingsRepository(context)
@@ -44,8 +39,16 @@ class MainActivity : ComponentActivity() {
       
       val isDarkTheme = if (settings.isDarkMode || settings.backgroundUri != null) true else isSystemInDarkTheme()
 
+      val windowInsetsController = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
+      windowInsetsController.isAppearanceLightStatusBars = !isDarkTheme
+
       BreathingAppTheme(darkTheme = isDarkTheme) {
-        AppNavigation()
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            AppNavigation()
+        }
       }
     }
   }

@@ -20,17 +20,20 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.breathingapp.data.SettingsRepository
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.breathingapp.ui.settings.SettingsViewModel
+import com.example.breathingapp.ui.settings.SettingsViewModelFactory
 import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.sin
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GardenScreen(modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    val repository = remember { SettingsRepository(context) }
-    val settings by repository.settingsFlow.collectAsState(initial = com.example.breathingapp.data.AppSettings())
+fun GardenScreen(
+    modifier: Modifier = Modifier,
+    viewModel: SettingsViewModel = viewModel(factory = SettingsViewModelFactory(LocalContext.current))
+) {
+    val settings by viewModel.settingsState.collectAsState()
     val coroutineScope = rememberCoroutineScope()
 
     val streak = settings.dailyStreak
@@ -87,17 +90,17 @@ fun GardenScreen(modifier: Modifier = Modifier) {
                 Text("Semilla:", fontWeight = FontWeight.Bold)
                 FilterChip(
                     selected = currentSeed == "flower",
-                    onClick = { coroutineScope.launch { repository.updateSeedType("flower") } },
+                    onClick = { viewModel.updateSeedType("flower") },
                     label = { Text("🌸 Flor") }
                 )
                 FilterChip(
                     selected = currentSeed == "bonsai",
-                    onClick = { coroutineScope.launch { repository.updateSeedType("bonsai") } },
+                    onClick = { viewModel.updateSeedType("bonsai") },
                     label = { Text("🌳 Bonsái") }
                 )
                 FilterChip(
                     selected = currentSeed == "cactus",
-                    onClick = { coroutineScope.launch { repository.updateSeedType("cactus") } },
+                    onClick = { viewModel.updateSeedType("cactus") },
                     label = { Text("🌵 Cactus") }
                 )
             }

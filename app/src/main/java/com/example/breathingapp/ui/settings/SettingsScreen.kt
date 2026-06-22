@@ -1,5 +1,6 @@
 package com.example.breathingapp.ui.settings
 
+import android.content.Context
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -14,23 +15,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.breathingapp.data.SettingsRepository
 import com.example.breathingapp.data.ReminderReceiver
-import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(
     onNavigateToProfile: () -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: SettingsViewModel = viewModel()
+    viewModel: SettingsViewModel = viewModel(factory = SettingsViewModelFactory(LocalContext.current))
 ) {
     val context = LocalContext.current
-    val settings by viewModel.settings.collectAsState()
-
-    var darkModeEnabled = settings.isDarkMode
-    var bellEnabled = settings.isBellEnabled
-    var backgroundAudioEnabled = settings.isBackgroundEnabled
-    var vibrationEnabled = settings.isVibrationEnabled
+    val settings by viewModel.settingsState.collectAsState()
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia(),
@@ -47,7 +45,7 @@ fun SettingsScreen(
         onResult = { isGranted ->
             if (isGranted) {
                 // Verificar alarmas exactas (Android 12+)
-                val alarmManager = context.getSystemService(android.content.Context.ALARM_SERVICE) as? android.app.AlarmManager
+                val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager
                 val canScheduleExact = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
                     alarmManager?.canScheduleExactAlarms() == true
                 } else {
@@ -126,10 +124,8 @@ fun SettingsScreen(
             SettingsSwitch(
                 title = "Tema Oscuro",
                 subtitle = "Cambiar entre modo claro y oscuro",
-                checked = darkModeEnabled,
-                onCheckedChange = { 
-                    viewModel.updateDarkMode(it) 
-                }
+                checked = settings.isDarkMode,
+                onCheckedChange = { viewModel.updateDarkMode(it) }
             )
             SettingsItemClickable(
                 title = "Fondo de Pantalla Personalizado",
@@ -177,7 +173,7 @@ fun SettingsScreen(
                             }
                         } else {
                             // Verificar alarmas exactas (Android 12+)
-                            val alarmManager = context.getSystemService(android.content.Context.ALARM_SERVICE) as? android.app.AlarmManager
+                            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager
                             val canScheduleExact = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
                                 alarmManager?.canScheduleExactAlarms() == true
                             } else {
@@ -239,28 +235,22 @@ fun SettingsScreen(
                 title = "Meditación Guiada",
                 subtitle = "Instrucciones de voz relajantes durante tu sesión",
                 checked = settings.isGuidedMeditationEnabled,
-                onCheckedChange = { 
-                    viewModel.updateGuidedMeditation(it) 
-                }
+                onCheckedChange = { viewModel.updateGuidedMeditation(it) }
             )
             SettingsSwitch(
                 title = "Campana Guía",
                 subtitle = "Efectos de sonido al respirar",
-                checked = bellEnabled,
-                onCheckedChange = { 
-                    viewModel.updateBell(it) 
-                }
+                checked = settings.isBellEnabled,
+                onCheckedChange = { viewModel.updateBell(it) }
             )
             SettingsSwitch(
                 title = "Sonido de Fondo",
                 subtitle = "Reproducir un sonido ambiental relajante durante el ejercicio",
-                checked = backgroundAudioEnabled,
-                onCheckedChange = { 
-                    viewModel.updateBackground(it) 
-                }
+                checked = settings.isBackgroundEnabled,
+                onCheckedChange = { viewModel.updateBackground(it) }
             )
 
-            if (backgroundAudioEnabled) {
+            if (settings.isBackgroundEnabled) {
                 Text(
                     text = "Tipo de Sonido:",
                     style = MaterialTheme.typography.labelLarge,
@@ -293,10 +283,8 @@ fun SettingsScreen(
             SettingsSwitch(
                 title = "Vibración Háptica",
                 subtitle = "Vibraciones al cambiar de fase",
-                checked = vibrationEnabled,
-                onCheckedChange = { 
-                    viewModel.updateVibration(it) 
-                }
+                checked = settings.isVibrationEnabled,
+                onCheckedChange = { viewModel.updateVibration(it) }
             )
         }
     }
@@ -381,5 +369,12 @@ fun SettingsInfoItem(title: String, value: String) {
     ) {
         Text(text = title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
         Text(text = value, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+    }
+}
+
+class SettingsViewModelFactory(private val context: Context) : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        return SettingsViewModel(SettingsRepository(context)) as T
     }
 }

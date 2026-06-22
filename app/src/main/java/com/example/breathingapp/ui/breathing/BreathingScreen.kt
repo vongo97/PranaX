@@ -6,7 +6,6 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.content.Context
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -20,21 +19,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import android.media.AudioManager
 import android.media.AudioAttributes
 import android.media.SoundPool
 import com.example.breathingapp.domain.BreathingPattern
-import com.example.breathingapp.domain.BoxBreathing
 import com.example.breathingapp.R
-import com.example.breathingapp.data.NeonSyncRepository
 import android.speech.tts.TextToSpeech
 import java.util.Locale
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
+import com.example.breathingapp.ui.settings.SettingsViewModel
+import com.example.breathingapp.ui.settings.SettingsViewModelFactory
 
 @Composable
 fun BreathingScreen(
@@ -42,19 +39,13 @@ fun BreathingScreen(
     targetDurationMinutes: Int = 5,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: BreathingViewModel = viewModel()
+    viewModel: BreathingViewModel = viewModel(),
+    settingsViewModel: SettingsViewModel = viewModel(factory = SettingsViewModelFactory(LocalContext.current))
 ) {
     val context = LocalContext.current
-    val settingsRepository = remember { com.example.breathingapp.data.SettingsRepository(context) }
-    val settings by settingsRepository.settingsFlow.collectAsState(initial = com.example.breathingapp.data.AppSettings())
+    val settings by settingsViewModel.settingsState.collectAsState()
     val coroutineScope = rememberCoroutineScope()
-
-    val isRunning by viewModel.isRunning.collectAsState()
-    val currentPhase by viewModel.currentPhase.collectAsState()
-    val timeLeftInPhaseMs by viewModel.timeLeftInPhaseMs.collectAsState()
-    val elapsedSessionTimeMs by viewModel.elapsedSessionTimeMs.collectAsState()
-    val targetDurationMs by viewModel.targetDurationMs.collectAsState()
-    val currentPattern by viewModel.currentPattern.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
 
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
 
@@ -91,14 +82,14 @@ fun BreathingScreen(
         }
     }
 
-    // WAKELOCK, TTS y StopSession: Evita que la pantalla se apague y libera recursos al salir
+    // WAKELOCK y parada de vibración
     DisposableEffect(Unit) {
         val window = (context as? android.app.Activity)?.window
         window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         onDispose {
             window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             vibrator.cancel() // Detener vibración al salir de la pantalla
-            viewModel.stopSession() // Detener el flujo del bucle del viewmodel
+            viewModel.stopSession() // Detener la sesión para liberar hilos
         }
     }
 
@@ -129,7 +120,7 @@ fun BreathingScreen(
             mp?.isLooping = true
             mp?.setVolume(0.5f, 0.5f)
             mediaPlayerBg.value = mp
-            if (isRunning) {
+            if (uiState.isRunning) {
                 mp?.start()
             }
         }
@@ -155,76 +146,44 @@ fun BreathingScreen(
         }
     }
 
-    // Reactividad de reproducción del audio de fondo al estado de ejecución
-    LaunchedEffect(isRunning) {
+    // Controlar reproducción de música de fondo basado en estado de reproducción
+    LaunchedEffect(uiState.isRunning, settings.isBackgroundEnabled) {
         val mp = mediaPlayerBg.value
-        if (mp != null) {
-            if (isRunning) {
-                mp.start()
-            } else {
-                mp.pause()
-            }
+        if (uiState.isRunning && settings.isBackgroundEnabled) {
+            mp?.start()
+        } else {
+            mp?.pause()
         }
     }
 
-    // Lanzador del bucle del ejercicio
-    LaunchedEffect(isRunning) {
-        if (isRunning) {
-            viewModel.runBreathingLoop {
-                // Lógica de auto-completar
-                coroutineScope.launch {
-                    val minutes = Math.ceil(elapsedSessionTimeMs / 60000.0).toInt()
-                    settingsRepository.recordSessionCompletion(minutes)
-                    
-                    // Sincronizar en la nube si hay usuario logueado
-                    val latestSettings = settingsRepository.settingsFlow.first()
-                    if (latestSettings.loggedInUserEmail != null) {
-                        val syncRepository = NeonSyncRepository(context)
-                        syncRepository.pushStats(
-                            streak = latestSettings.dailyStreak,
-                            sessions = latestSettings.completedSessionsCount,
-                            minutes = latestSettings.totalMinutesMeditated
-                        )
+    // Colectar eventos de efectos secundarios emitidos por el ViewModel
+    LaunchedEffect(Unit) {
+        viewModel.eventFlow.collect { event ->
+            when (event) {
+                is BreathingViewModel.BreathingEvent.PlaySound -> {
+                    if (settings.isBellEnabled) {
+                        val soundId = if (event.isHighFrequency) soundIdHigh.value else soundIdLow.value
+                        if (soundId != 0) {
+                            soundPool.play(soundId, 1f, 1f, 1, 0, 1f)
+                        }
                     }
+                }
+                is BreathingViewModel.BreathingEvent.TriggerVibration -> {
+                    vibratePhaseWaveform(vibrator, event.phase, event.durationMs, settings.isVibrationEnabled)
+                }
+                is BreathingViewModel.BreathingEvent.SessionCompleted -> {
+                    val minutes = Math.ceil(uiState.elapsedSessionTimeMs / 60000.0).toInt()
+                    settingsViewModel.recordSessionCompletion(minutes)
                     onBack()
                 }
             }
         }
     }
 
-    // Efectos de campana y vibración reactivos a la fase actual del ejercicio
-    LaunchedEffect(currentPhase, isRunning) {
-        if (isRunning && currentPhase != BreathingPhase.IDLE) {
-            // Campana guía
-            if (settings.isBellEnabled) {
-                if (currentPhase == BreathingPhase.INHALE && soundIdHigh.value != 0) {
-                    soundPool.play(soundIdHigh.value, 1f, 1f, 1, 0, 1f)
-                } else if (currentPhase == BreathingPhase.EXHALE && soundIdLow.value != 0) {
-                    soundPool.play(soundIdLow.value, 1f, 1f, 1, 0, 1f)
-                }
-            }
-
-            // Vibración
-            val durationMs = when (currentPhase) {
-                BreathingPhase.PREPARE -> 5000L
-                BreathingPhase.INHALE -> currentPattern.inhaleMs
-                BreathingPhase.HOLD_IN -> currentPattern.holdInMs
-                BreathingPhase.EXHALE -> currentPattern.exhaleMs
-                BreathingPhase.HOLD_OUT -> currentPattern.holdOutMs
-                else -> 0L
-            }
-            if (durationMs > 0) {
-                vibratePhaseWaveform(vibrator, currentPhase, durationMs, settings)
-            }
-        } else {
-            vibrator.cancel()
-        }
-    }
-
-    // Efectos de voz (TTS)
-    LaunchedEffect(currentPhase, settings.isGuidedMeditationEnabled, isRunning, tts) {
-        if (settings.isGuidedMeditationEnabled && isRunning) {
-            val textToSpeak = when (currentPhase) {
+    // Narrador de voz TTS (Text to Speech)
+    LaunchedEffect(uiState.currentPhase, settings.isGuidedMeditationEnabled, uiState.isRunning, tts) {
+        if (settings.isGuidedMeditationEnabled && uiState.isRunning) {
+            val textToSpeak = when (uiState.currentPhase) {
                 BreathingPhase.INHALE -> "Inhala"
                 BreathingPhase.HOLD_IN -> "Retén"
                 BreathingPhase.EXHALE -> "Exhala"
@@ -233,7 +192,7 @@ fun BreathingScreen(
                 else -> ""
             }
             if (textToSpeak.isNotEmpty()) {
-                if (currentPhase == BreathingPhase.PREPARE) {
+                if (uiState.currentPhase == BreathingPhase.PREPARE) {
                     delay(500)
                 }
                 val params = android.os.Bundle().apply {
@@ -245,9 +204,8 @@ fun BreathingScreen(
     }
 
     // Animation states
-    val infiniteTransition = rememberInfiniteTransition(label = "breathing")
     val scale by animateFloatAsState(
-        targetValue = when (currentPhase) {
+        targetValue = when (uiState.currentPhase) {
             BreathingPhase.PREPARE -> 1.0f
             BreathingPhase.INHALE -> 1.5f
             BreathingPhase.HOLD_IN -> 1.5f
@@ -256,7 +214,7 @@ fun BreathingScreen(
             BreathingPhase.IDLE -> 1.0f
         },
         animationSpec = tween(
-            durationMillis = when (currentPhase) {
+            durationMillis = when (uiState.currentPhase) {
                 BreathingPhase.PREPARE -> 5000
                 BreathingPhase.INHALE -> pattern.inhaleMs.toInt()
                 BreathingPhase.EXHALE -> pattern.exhaleMs.toInt()
@@ -295,9 +253,9 @@ fun BreathingScreen(
         Spacer(modifier = Modifier.height(32.dp))
 
         // Progress Text
-        if (targetDurationMs > 0) {
-            val elapsedSec = elapsedSessionTimeMs / 1000
-            val targetSec = targetDurationMs / 1000
+        if (uiState.targetDurationMs > 0) {
+            val elapsedSec = uiState.elapsedSessionTimeMs / 1000
+            val targetSec = uiState.targetDurationMs / 1000
             Text(
                 text = "${elapsedSec / 60}:${(elapsedSec % 60).toString().padStart(2, '0')} / ${targetSec / 60}:00",
                 style = MaterialTheme.typography.titleMedium,
@@ -308,8 +266,7 @@ fun BreathingScreen(
 
         // Animation Container
         Box(
-            modifier = Modifier
-                .size(250.dp),
+            modifier = Modifier.size(250.dp),
             contentAlignment = Alignment.Center
         ) {
             // Animated Circle
@@ -326,13 +283,13 @@ fun BreathingScreen(
             // Text inside
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = currentPhase.displayName,
+                    text = uiState.currentPhase.displayName,
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                     fontWeight = FontWeight.Bold
                 )
-                if (isRunning) {
-                    val secondsLeft = Math.ceil(timeLeftInPhaseMs / 1000.0).toInt()
+                if (uiState.isRunning) {
+                    val secondsLeft = Math.ceil(uiState.timeLeftInPhaseMs / 1000.0).toInt()
                     Text(
                         text = "$secondsLeft",
                         style = MaterialTheme.typography.headlineLarge,
@@ -350,30 +307,18 @@ fun BreathingScreen(
                 .fillMaxWidth(0.6f)
                 .height(56.dp)
         ) {
-            Text(if (isRunning) "Pausar" else "Comenzar", style = MaterialTheme.typography.titleMedium)
+            Text(if (uiState.isRunning) "Pausar" else "Comenzar", style = MaterialTheme.typography.titleMedium)
         }
 
-        if (!isRunning && currentPhase != BreathingPhase.IDLE) {
+        if (!uiState.isRunning && uiState.currentPhase != BreathingPhase.IDLE) {
             Spacer(modifier = Modifier.height(16.dp))
             OutlinedButton(
                 onClick = {
+                    viewModel.stopSession()
                     mediaPlayerBg.value?.pause()
-                    coroutineScope.launch {
-                        val minutes = Math.ceil(elapsedSessionTimeMs / 60000.0).toInt()
-                        settingsRepository.recordSessionCompletion(minutes)
-                        
-                        // Sincronizar en la nube si hay usuario logueado
-                        val latestSettings = settingsRepository.settingsFlow.first()
-                        if (latestSettings.loggedInUserEmail != null) {
-                            val syncRepository = NeonSyncRepository(context)
-                            syncRepository.pushStats(
-                                streak = latestSettings.dailyStreak,
-                                sessions = latestSettings.completedSessionsCount,
-                                minutes = latestSettings.totalMinutesMeditated
-                            )
-                        }
-                        onBack()
-                    }
+                    val minutes = Math.ceil(uiState.elapsedSessionTimeMs / 60000.0).toInt()
+                    settingsViewModel.recordSessionCompletion(minutes)
+                    onBack()
                 },
                 modifier = Modifier
                     .fillMaxWidth(0.6f)
@@ -387,13 +332,16 @@ fun BreathingScreen(
     }
 }
 
+/**
+ * Función helper en la capa de UI para disparar la vibración haptica de forma segura y controlada.
+ */
 private fun vibratePhaseWaveform(
-    vibrator: Vibrator?,
-    phase: BreathingPhase,
-    durationMs: Long,
-    settings: com.example.breathingapp.data.AppSettings
+    vibrator: Vibrator?, 
+    phase: BreathingPhase, 
+    durationMs: Long, 
+    isVibrationEnabled: Boolean
 ) {
-    if (!settings.isVibrationEnabled || vibrator == null || durationMs <= 0) return
+    if (!isVibrationEnabled || vibrator == null || durationMs <= 0) return
     try {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val stepDuration = 200L
@@ -403,18 +351,21 @@ private fun vibratePhaseWaveform(
 
             when (phase) {
                 BreathingPhase.INHALE -> {
+                    // Amplitud ascendente (creciente de 15 a 150)
                     for (i in 0 until steps) {
                         val progress = i.toFloat() / (steps - 1)
                         amplitudes[i] = (15 + progress * 135).toInt().coerceIn(0, 255)
                     }
                 }
                 BreathingPhase.EXHALE -> {
+                    // Amplitud descendente (decreciente de 150 a 15)
                     for (i in 0 until steps) {
                         val progress = i.toFloat() / (steps - 1)
                         amplitudes[i] = (150 - progress * 135).toInt().coerceIn(0, 255)
                     }
                 }
                 BreathingPhase.HOLD_IN -> {
+                    // Latido suave
                     for (i in 0 until steps) {
                         amplitudes[i] = if (i % 5 == 0) 50 else 0
                     }

@@ -18,10 +18,9 @@ import com.example.breathingapp.ui.main.MainScreen
 import com.example.breathingapp.ui.prep.SessionPrepScreen
 import com.example.breathingapp.ui.settings.SettingsScreen
 import com.example.breathingapp.ui.garden.GardenScreen
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.breathingapp.domain.BreathingPattern
-import com.example.breathingapp.ui.settings.SettingsViewModel
-import com.example.breathingapp.ui.profile.ProfileViewModel
+import com.example.breathingapp.data.SettingsRepository
+import com.example.breathingapp.data.NeonSyncRepository
 import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.layout.Box
@@ -43,24 +42,18 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Settings
 
 @Composable
-fun AppNavigation(
-    settingsViewModel: SettingsViewModel = viewModel(),
-    profileViewModel: ProfileViewModel = viewModel()
-) {
+fun AppNavigation() {
     val navController = rememberNavController()
     val context = LocalContext.current
     val repository = remember { BreathingPatternRepository(context) }
-    val settings by settingsViewModel.settings.collectAsState()
+    val settingsRepository = remember { SettingsRepository(context) }
+    val settings by settingsRepository.settingsFlow.collectAsState(initial = com.example.breathingapp.data.AppSettings())
 
     // Sincronización automática de base de datos en el arranque si está logueado
     LaunchedEffect(settings.loggedInUserEmail) {
-        val email = settings.loggedInUserEmail
-        if (email != null) {
-            profileViewModel.syncStats(
-                streak = settings.dailyStreak,
-                sessions = settings.completedSessionsCount,
-                minutes = settings.totalMinutesMeditated
-            ) { /* No-op, el estado se actualiza en settingsFlow en segundo plano */ }
+        if (settings.loggedInUserEmail != null) {
+            val syncRepository = NeonSyncRepository(settingsRepository)
+            syncRepository.pullAndSyncStats()
         }
     }
     
@@ -75,110 +68,114 @@ fun AppNavigation(
 
     val showBottomBar = isHomeSelected || isCreateSelected || isGardenSelected || isSettingsSelected
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        containerColor = Color.Transparent,
-        contentColor = MaterialTheme.colorScheme.onBackground,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        bottomBar = {
-            if (showBottomBar) {
-                NavigationBar(
-                    containerColor = Color(0xFF0D1411),
-                    tonalElevation = 0.dp
-                ) {
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Default.Home, contentDescription = "Ejercicios") },
-                        label = { Text("Ejercicios") },
-                        selected = isHomeSelected,
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            indicatorColor = Color.Transparent
-                        ),
-                        onClick = {
-                            navController.navigate(HomeRoute) {
-                                popUpTo(HomeRoute) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Fondo Global (detrás de todo, incluyendo el status bar)
+        if (settings.backgroundUri != null) {
+            AsyncImage(
+                model = settings.backgroundUri,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            // Capa oscura para legibilidad
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.5f))
+            )
+        }
+
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onBackground,
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            bottomBar = {
+                if (showBottomBar) {
+                    NavigationBar(
+                        containerColor = Color(0xFF0D1411),
+                        tonalElevation = 0.dp
+                    ) {
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.Home, contentDescription = "Ejercicios") },
+                            label = { Text("Ejercicios") },
+                            selected = isHomeSelected,
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                indicatorColor = Color.Transparent
+                            ),
+                            onClick = {
+                                navController.navigate(HomeRoute) {
+                                    popUpTo(HomeRoute) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
                             }
-                        }
-                    )
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Default.Add, contentDescription = "Crear") },
-                        label = { Text("Crear") },
-                        selected = isCreateSelected,
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            indicatorColor = Color.Transparent
-                        ),
-                        onClick = {
-                            navController.navigate(CreateRoute) {
-                                popUpTo(HomeRoute) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
+                        )
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.Add, contentDescription = "Crear") },
+                            label = { Text("Crear") },
+                            selected = isCreateSelected,
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                indicatorColor = Color.Transparent
+                            ),
+                            onClick = {
+                                navController.navigate(CreateRoute) {
+                                    popUpTo(HomeRoute) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
                             }
-                        }
-                    )
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Default.Favorite, contentDescription = "Jardín") },
-                        label = { Text("Jardín") },
-                        selected = isGardenSelected,
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            indicatorColor = Color.Transparent
-                        ),
-                        onClick = {
-                            navController.navigate(GardenRoute) {
-                                popUpTo(HomeRoute) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
+                        )
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.Favorite, contentDescription = "Jardín") },
+                            label = { Text("Jardín") },
+                            selected = isGardenSelected,
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                indicatorColor = Color.Transparent
+                            ),
+                            onClick = {
+                                navController.navigate(GardenRoute) {
+                                    popUpTo(HomeRoute) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
                             }
-                        }
-                    )
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Default.Settings, contentDescription = "Ajustes") },
-                        label = { Text("Ajustes") },
-                        selected = isSettingsSelected,
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            indicatorColor = Color.Transparent
-                        ),
-                        onClick = {
-                            navController.navigate(SettingsRoute) {
-                                popUpTo(HomeRoute) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
+                        )
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.Settings, contentDescription = "Ajustes") },
+                            label = { Text("Ajustes") },
+                            selected = isSettingsSelected,
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                indicatorColor = Color.Transparent
+                            ),
+                            onClick = {
+                                navController.navigate(SettingsRoute) {
+                                    popUpTo(HomeRoute) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
-        }
-    ) { innerPadding ->
-        Box(modifier = Modifier.fillMaxSize()) {
-            // Background Image
-            if (settings.backgroundUri != null) {
-                AsyncImage(
-                    model = settings.backgroundUri,
-                    contentDescription = "Fondo",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-                // Dark overlay to make text readable
-                Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)))
-            }
-
+        ) { innerPadding ->
             NavHost(
                 navController = navController,
                 startDestination = HomeRoute,
